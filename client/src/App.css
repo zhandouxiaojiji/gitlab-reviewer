@@ -1,0 +1,64 @@
+.App {
+  min-height: 100vh;
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+
+.ant-layout-content {
+  padding: 0;
+}
+
+/* 登录页面样式 */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-form {
+  background: white;
+  padding: 40px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 400px;
+  width: 100%;
+}
+
+/* 仪表板样式 */
+.dashboard-container {
+  padding: 24px;
+  background: #f0f2f5;
+  min-height: 100vh;
+}
+
+.dashboard-header {
+  background: white;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stats-cards {
+  margin-bottom: 24px;
+}
+
+.ant-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 16px;
+  }
+  
+  .login-form {
+    margin: 16px;
+    padding: 24px;
+  }
+} 

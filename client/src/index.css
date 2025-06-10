@@ -5,6 +5,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #f0f2f5;
 }
 
 code {
@@ -12,8 +13,26 @@ code {
     monospace;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+/* Ant Design 定制化样式 */
 .ant-layout {
-  min-height: 100vh;
+  background: #f0f2f5;
+}
+
+.ant-layout-header {
+  background: #001529;
+  color: white;
+}
+
+.ant-menu-dark.ant-menu-horizontal {
+  line-height: 64px;
 }
 
 .site-layout-content {

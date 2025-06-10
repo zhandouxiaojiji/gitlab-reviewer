@@ -1,13 +1,13 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
+import { Spin } from 'antd';
 
-interface PrivateRouteProps {
+interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -23,7 +23,11 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
     );
   }
 
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
 };
 
-export default PrivateRoute; 
+export default ProtectedRoute; 

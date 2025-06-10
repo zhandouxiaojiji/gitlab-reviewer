@@ -1,34 +1,37 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { Layout } from 'antd';
+import { Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import PrivateRoute from './components/PrivateRoute';
-import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import './App.css';
 
-const { Content } = Layout;
-
-function App() {
+const App: React.FC = () => {
   return (
     <AuthProvider>
-      <Layout className="ant-layout">
-        <Content>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/dashboard"
-              element={
-                <PrivateRoute>
-                  <Dashboard />
-                </PrivateRoute>
-              }
-            />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Content>
-      </Layout>
+      <div className="App">
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route 
+            path="/" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </div>
     </AuthProvider>
   );
-}
+};
 
 export default App; 

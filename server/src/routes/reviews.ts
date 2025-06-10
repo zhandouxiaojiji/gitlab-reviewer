@@ -1,11 +1,17 @@
 import express from 'express';
+import { Response } from 'express';
 import Review from '../models/Review';
 import { authenticateToken } from '../middleware/auth';
+
+// 定义AuthRequest接口
+interface AuthRequest extends express.Request {
+  user?: any;
+}
 
 const router = express.Router();
 
 // 获取所有review记录
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId, page = 1, limit = 20 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
@@ -39,7 +45,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // 创建或更新review记录
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const {
       commitId,
@@ -85,7 +91,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // 获取review统计信息
-router.get('/stats', authenticateToken, async (req, res) => {
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId } = req.query;
     const filter: any = {};

@@ -1,11 +1,17 @@
 import express from 'express';
+import { Response, NextFunction } from 'express';
 import Project from '../models/Project';
 import { authenticateToken } from '../middleware/auth';
+
+// 定义AuthRequest接口
+interface AuthRequest extends express.Request {
+  user?: any;
+}
 
 const router = express.Router();
 
 // 获取所有项目
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const projects = await Project.find({ isActive: true })
       .populate('createdBy', 'username email')
@@ -22,7 +28,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // 创建新项目
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { name, gitlabProjectId, gitlabUrl, description } = req.body;
 
@@ -58,7 +64,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // 获取单个项目详情
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const project = await Project.findById(req.params.id)
       .populate('createdBy', 'username email');
