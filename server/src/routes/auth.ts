@@ -1,9 +1,19 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import User from '../models/User';
 
 const router = express.Router();
+
+// 配置的用户列表（不使用数据库）
+const users = [
+  {
+    id: 'admin-001',
+    username: 'admin',
+    email: 'admin@example.com',
+    password: '$2a$10$4gWvxttrtJuEmw9WelWK4eQeSNSOkcDva5SM.pxJVb1CLvUs94JpC', // 对应密码 "123456"
+    role: 'admin'
+  }
+];
 
 // 用户登录
 router.post('/login', async (req, res) => {
@@ -16,9 +26,7 @@ router.post('/login', async (req, res) => {
     }
 
     // 查找用户
-    const user = await User.findOne({ 
-      $or: [{ username }, { email: username }] 
-    });
+    const user = users.find(u => u.username === username || u.email === username);
 
     if (!user) {
       return res.status(401).json({ message: '用户名或密码错误' });
@@ -32,7 +40,7 @@ router.post('/login', async (req, res) => {
 
     // 生成JWT令牌
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user.id },
       process.env.JWT_SECRET || 'default-secret',
       { expiresIn: '24h' }
     );
@@ -41,7 +49,7 @@ router.post('/login', async (req, res) => {
       message: '登录成功',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         role: user.role
@@ -53,50 +61,33 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 用户注册
-router.post('/register', async (req, res) => {
+// 获取当前用户信息
+router.get('/me', async (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: '访问令牌缺失' });
+  }
+
   try {
-    const { username, email, password } = req.body;
-
-    // 验证输入
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: '所有字段都是必填的' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { userId: string };
+    const user = users.find(u => u.id === decoded.userId);
+    
+    if (!user) {
+      return res.status(401).json({ message: '用户不存在' });
     }
 
-    // 检查用户是否已存在
-    const existingUser = await User.findOne({
-      $or: [{ username }, { email }]
-    });
-
-    if (existingUser) {
-      return res.status(400).json({ message: '用户名或邮箱已存在' });
-    }
-
-    // 加密密码
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // 创建用户
-    const user = new User({
-      username,
-      email,
-      password: hashedPassword
-    });
-
-    await user.save();
-
-    res.status(201).json({
-      message: '用户注册成功',
+    res.json({
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         role: user.role
       }
     });
   } catch (error) {
-    console.error('注册错误:', error);
-    res.status(500).json({ message: '服务器内部错误' });
+    return res.status(403).json({ message: '无效的访问令牌' });
   }
 });
 

@@ -1,7 +1,7 @@
 import express from 'express';
 import { Response, NextFunction } from 'express';
-import Project from '../models/Project';
 import { authenticateToken } from '../middleware/auth';
+import { projectStorage } from '../utils/storage';
 
 // 定义AuthRequest接口
 interface AuthRequest extends express.Request {
@@ -13,9 +13,9 @@ const router = express.Router();
 // 获取所有项目
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const projects = await Project.find({ isActive: true })
-      .populate('createdBy', 'username email')
-      .sort({ createdAt: -1 });
+    const projects = projectStorage.findAll()
+      .filter(p => p.isActive !== false)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     res.json({
       message: '获取项目列表成功',
@@ -32,26 +32,20 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { name, gitlabProjectId, gitlabUrl, description } = req.body;
 
-    // 验证输入
-    if (!name || !gitlabProjectId || !gitlabUrl) {
-      return res.status(400).json({ message: '项目名称、GitLab项目ID和URL是必填的' });
-    }
-
     // 检查项目是否已存在
-    const existingProject = await Project.findOne({ gitlabProjectId });
+    const existingProject = projectStorage.findAll().find(p => p.gitlabProjectId === gitlabProjectId);
     if (existingProject) {
-      return res.status(400).json({ message: 'GitLab项目已存在' });
+      return res.status(400).json({ message: '该GitLab项目已存在' });
     }
 
-    const project = new Project({
+    const project = projectStorage.create({
       name,
       gitlabProjectId,
       gitlabUrl,
       description,
-      createdBy: req.user._id
+      isActive: true,
+      createdBy: req.user.id
     });
-
-    await project.save();
 
     res.status(201).json({
       message: '项目创建成功',
@@ -66,8 +60,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 获取单个项目详情
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const project = await Project.findById(req.params.id)
-      .populate('createdBy', 'username email');
+    const project = projectStorage.findById(req.params.id);
 
     if (!project) {
       return res.status(404).json({ message: '项目不存在' });

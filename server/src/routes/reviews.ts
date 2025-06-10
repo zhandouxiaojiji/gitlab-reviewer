@@ -1,7 +1,7 @@
 import express from 'express';
 import { Response } from 'express';
-import Review from '../models/Review';
 import { authenticateToken } from '../middleware/auth';
+import { reviewStorage } from '../utils/storage';
 
 // 定义AuthRequest接口
 interface AuthRequest extends express.Request {
@@ -14,27 +14,32 @@ const router = express.Router();
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId, page = 1, limit = 20 } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-
+    
     const filter: any = {};
     if (projectId) {
       filter.projectId = projectId;
     }
 
-    const reviews = await Review.find(filter)
-      .populate('projectId', 'name gitlabUrl')
-      .sort({ commitDate: -1 })
-      .skip(skip)
-      .limit(Number(limit));
+    const allReviews = reviewStorage.findAll(filter);
+    
+    // 分页处理
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
+    
+    const reviews = allReviews
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(startIndex, endIndex);
 
-    const total = await Review.countDocuments(filter);
+    const total = allReviews.length;
 
     res.json({
       message: '获取review记录成功',
       reviews,
       pagination: {
-        current: Number(page),
-        pageSize: Number(limit),
+        current: pageNum,
+        pageSize: limitNum,
         total
       }
     });
@@ -65,20 +70,16 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     }
 
     // 尝试更新现有记录或创建新记录
-    const review = await Review.findOneAndUpdate(
-      { commitId },
-      {
-        commitMessage,
-        commitAuthor,
-        commitDate: new Date(commitDate),
-        projectId,
-        hasReview: hasReview || false,
-        reviewedBy: reviewedBy || [],
-        reviewComments: reviewComments || [],
-        gitlabCommitUrl
-      },
-      { upsert: true, new: true }
-    );
+    const review = reviewStorage.updateByCommitId(commitId, {
+      commitMessage,
+      commitAuthor,
+      commitDate: new Date(commitDate),
+      projectId,
+      hasReview: hasReview || false,
+      reviewedBy: reviewedBy || [],
+      reviewComments: reviewComments || [],
+      gitlabCommitUrl
+    });
 
     res.json({
       message: 'Review记录保存成功',
@@ -99,19 +100,11 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
       filter.projectId = projectId;
     }
 
-    const totalCommits = await Review.countDocuments(filter);
-    const reviewedCommits = await Review.countDocuments({ ...filter, hasReview: true });
-    const unReviewedCommits = totalCommits - reviewedCommits;
-    const reviewRate = totalCommits > 0 ? (reviewedCommits / totalCommits * 100).toFixed(2) : 0;
+    const stats = reviewStorage.getStats(filter);
 
     res.json({
       message: '获取统计信息成功',
-      stats: {
-        totalCommits,
-        reviewedCommits,
-        unReviewedCommits,
-        reviewRate: `${reviewRate}%`
-      }
+      stats
     });
   } catch (error) {
     console.error('获取统计信息错误:', error);
