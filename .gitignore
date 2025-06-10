@@ -121,4 +121,7 @@ node_modules
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db 
+Thumbs.db
+
+# User data storage
+server/data/ 

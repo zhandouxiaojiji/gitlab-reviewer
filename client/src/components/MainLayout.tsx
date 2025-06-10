@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout, Menu, Button, message, Typography } from 'antd';
 import { 
   DashboardOutlined, 
-  ProjectOutlined, 
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
@@ -10,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import api from '../services/api';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -18,19 +18,46 @@ interface MainLayoutProps {
   children: React.ReactNode;
 }
 
+interface GitLabProject {
+  id: string;
+  name: string;
+  gitlabUrl: string;
+  accessToken: string;
+  description?: string;
+  createdAt: string;
+}
+
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { logout } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
   const username = searchParams.get('user');
+  const projectName = searchParams.get('project');
+  
+  const [projects, setProjects] = useState<GitLabProject[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // 如果URL中没有用户名参数，跳转到登录页
     if (!username) {
       navigate('/login');
+    } else {
+      loadProjects();
     }
   }, [username, navigate]);
+
+  const loadProjects = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/api/projects');
+      setProjects(response.data || []);
+    } catch (error) {
+      console.error('加载项目配置失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -41,23 +68,59 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const handleMenuClick = (key: string) => {
     // 在切换菜单时保持用户名参数
     switch (key) {
-      case '1':
+      case 'dashboard':
         navigate(`/dashboard?user=${username}`);
         break;
-      case '2':
-        navigate(`/projects?user=${username}`);
-        break;
-      case '3':
+      case 'settings':
         navigate(`/settings?user=${username}`);
+        break;
+      default:
+        // 处理项目菜单项点击
+        if (key.startsWith('project-')) {
+          const projectId = key.replace('project-', '');
+          const project = projects.find(p => p.id === projectId);
+          if (project) {
+            navigate(`/project?user=${username}&project=${encodeURIComponent(project.name)}&id=${projectId}`);
+          }
+        }
         break;
     }
   };
 
   // 根据当前路径确定选中的菜单项
   const getSelectedKey = () => {
-    if (location.pathname.includes('/settings')) return '3';
-    if (location.pathname.includes('/projects')) return '2';
-    return '1'; // 默认是dashboard
+    if (location.pathname.includes('/settings')) return 'settings';
+    if (location.pathname.includes('/project') && projectName) {
+      const project = projects.find(p => p.name === decodeURIComponent(projectName));
+      return project ? `project-${project.id}` : 'dashboard';
+    }
+    return 'dashboard'; // 默认是dashboard
+  };
+
+  // 构建菜单项
+  const getMenuItems = () => {
+    const baseItems = [
+      {
+        key: 'dashboard',
+        icon: <DashboardOutlined />,
+        label: '仪表盘',
+      }
+    ];
+
+    // 添加项目菜单项
+    const projectItems = projects.map(project => ({
+      key: `project-${project.id}`,
+      icon: <GitlabOutlined />,
+      label: project.name,
+    }));
+
+    const settingsItem = {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: '设置',
+    };
+
+    return [...baseItems, ...projectItems, settingsItem];
   };
 
   return (
@@ -85,23 +148,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           mode="inline"
           selectedKeys={[getSelectedKey()]}
           onClick={({ key }) => handleMenuClick(key)}
-          items={[
-            {
-              key: '1',
-              icon: <DashboardOutlined />,
-              label: '仪表盘',
-            },
-            {
-              key: '2',
-              icon: <ProjectOutlined />,
-              label: '项目管理',
-            },
-            {
-              key: '3',
-              icon: <SettingOutlined />,
-              label: '设置',
-            },
-          ]}
+          items={getMenuItems()}
         />
       </Sider>
       <Layout>
@@ -113,7 +160,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           alignItems: 'center'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h2 style={{ margin: 0 }}>GitLab 代码审查管理</h2>
+            <h2 style={{ margin: 0 }}>
+              {projectName ? `${decodeURIComponent(projectName)} - GitLab 代码审查` : 'GitLab 代码审查管理'}
+            </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <UserOutlined />
               <Text strong>{username}</Text>
