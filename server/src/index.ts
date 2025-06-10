@@ -28,5 +28,5 @@ app.get('/api/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
-  console.log('默认登录账号：admin / 123456');
+  console.log('使用任意用户名即可登录，系统会自动创建新用户');
 }); 

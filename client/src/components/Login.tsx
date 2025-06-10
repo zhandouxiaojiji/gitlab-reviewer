@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, Card, Typography } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,7 +8,6 @@ const { Title } = Typography;
 
 interface LoginForm {
   username: string;
-  password: string;
 }
 
 const Login: React.FC = () => {
@@ -18,15 +17,15 @@ const Login: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      navigate(`/dashboard?user=${user.username}`);
     }
   }, [user, navigate]);
 
   const onFinish = async (values: LoginForm) => {
     setLoading(true);
-    const success = await login(values.username, values.password);
+    const success = await login(values.username);
     if (success) {
-      navigate('/dashboard');
+      navigate(`/dashboard?user=${values.username}`);
     }
     setLoading(false);
   };
@@ -52,7 +51,7 @@ const Login: React.FC = () => {
           size="large"
           onFinish={onFinish}
           autoComplete="off"
-          initialValues={{ username: '', password: '' }}
+          initialValues={{ username: '' }}
         >
           <Form.Item
             name="username"
@@ -61,16 +60,6 @@ const Login: React.FC = () => {
             <Input 
               prefix={<UserOutlined />} 
               placeholder="用户名" 
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: '请输入密码!' }]}
-          >
-            <Input.Password
-              prefix={<LockOutlined />}
-              placeholder="密码"
             />
           </Form.Item>
 
@@ -88,7 +77,7 @@ const Login: React.FC = () => {
         </Form>
         
         <div style={{ textAlign: 'center', color: '#999', fontSize: '12px' }}>
-          默认账号: admin / 123456
+          输入任意用户名即可登录
         </div>
       </Card>
     </div>

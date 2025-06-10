@@ -1,21 +1,50 @@
-import React from 'react';
-import { Layout, Menu, Card, Button, message } from 'antd';
+import React, { useEffect } from 'react';
+import { Layout, Menu, Card, Button, message, Typography } from 'antd';
 import { 
   DashboardOutlined, 
   ProjectOutlined, 
   SettingOutlined,
-  LogoutOutlined 
+  LogoutOutlined,
+  UserOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 const { Header, Sider, Content } = Layout;
+const { Text } = Typography;
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const username = searchParams.get('user');
+
+  useEffect(() => {
+    // 如果URL中没有用户名参数，跳转到登录页
+    if (!username) {
+      navigate('/login');
+    }
+  }, [username, navigate]);
 
   const handleLogout = () => {
     logout();
+    navigate('/login');
     message.success('已成功退出登录');
+  };
+
+  const handleMenuClick = (key: string) => {
+    // 在切换菜单时保持用户名参数
+    switch (key) {
+      case '1':
+        navigate(`/dashboard?user=${username}`);
+        break;
+      case '2':
+        navigate(`/projects?user=${username}`);
+        break;
+      case '3':
+        navigate(`/settings?user=${username}`);
+        break;
+    }
   };
 
   return (
@@ -40,6 +69,7 @@ const Dashboard: React.FC = () => {
           theme="dark"
           mode="inline"
           defaultSelectedKeys={['1']}
+          onClick={({ key }) => handleMenuClick(key)}
           items={[
             {
               key: '1',
@@ -67,7 +97,13 @@ const Dashboard: React.FC = () => {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <h2 style={{ margin: 0 }}>GitLab 代码审查管理</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <h2 style={{ margin: 0 }}>GitLab 代码审查管理</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <UserOutlined />
+              <Text strong>{username}</Text>
+            </div>
+          </div>
           <Button 
             type="text" 
             icon={<LogoutOutlined />} 
@@ -77,7 +113,7 @@ const Dashboard: React.FC = () => {
           </Button>
         </Header>
         <Content style={{ margin: '16px' }}>
-          <Card title="欢迎使用 GitLab 代码审查管理工具">
+          <Card title={`欢迎 ${username}，使用 GitLab 代码审查管理工具`}>
             <p>这是一个用于管理 GitLab 代码审查的工具，您可以：</p>
             <ul>
               <li>查看每次提交的审查状态</li>

@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-// 配置的用户列表（与auth.ts保持一致）
+// 简化的用户列表（与auth.ts保持一致）
 const users = [
   {
     id: 'admin-001',
     username: 'admin',
     email: 'admin@example.com',
-    password: '$2a$10$4gWvxttrtJuEmw9WelWK4eQeSNSOkcDva5SM.pxJVb1CLvUs94JpC', // 对应密码 "123456"
     role: 'admin'
   }
 ];
@@ -25,11 +24,18 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { userId: string };
-    const user = users.find(u => u.id === decoded.userId);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { userId: string; username: string };
+    let user = users.find(u => u.id === decoded.userId);
     
     if (!user) {
-      return res.status(401).json({ message: '用户不存在' });
+      // 如果用户不存在，从token中重建用户信息
+      user = {
+        id: decoded.userId,
+        username: decoded.username,
+        email: `${decoded.username}@example.com`,
+        role: 'user'
+      };
+      users.push(user);
     }
 
     req.user = user;
