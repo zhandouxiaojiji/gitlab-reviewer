@@ -10,4 +10,6 @@
 2.后端使用 nodejs + express
 3.前后端都使用 typescript
 
+当前的开发环境是windows，使用的命令行是powershell，所以请使用powershell的命令。
+
 git commit 的规范：中文，不超过20字
