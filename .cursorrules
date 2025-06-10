@@ -1,0 +1,11 @@
+这是一个gitlab仓库代码review的辅助工具。
+
+这是本项目的基本功能：
+前端有一个记录每一次提交是否有review，被谁review的，是否review的依据是gitlab上的commit是否有评论。
+后端需要配置gitlab的相关配置
+支持多个项目的配置
+
+这是本项目所采用的技术栈:
+1.前端使用 react + ant design pro
+2.后端使用 nodejs + express
+3.前后端都使用 typescript
