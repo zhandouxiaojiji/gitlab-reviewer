@@ -18,6 +18,7 @@ const generateId = () => {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 const REVIEWS_FILE = path.join(DATA_DIR, 'reviews.json');
+const COMMITS_FILE = path.join(DATA_DIR, 'commits.json');
 
 // 确保数据目录存在
 if (!fs.existsSync(DATA_DIR)) {
@@ -187,4 +188,52 @@ export const reviewStorage = {
       reviewRate: totalCommits > 0 ? (reviewedCommits / totalCommits * 100).toFixed(1) : '0'
     };
   }
+};
+
+// 提交数据操作
+export const commitStorage = {
+  saveCommitData: (projectId: string, commitData: any) => {
+    const commits = readJSONFile(COMMITS_FILE);
+    const existingIndex = commits.findIndex((c: any) => c.projectId === projectId);
+    
+    if (existingIndex !== -1) {
+      commits[existingIndex] = commitData;
+    } else {
+      commits.push(commitData);
+    }
+    
+    writeJSONFile(COMMITS_FILE, commits);
+    return commitData;
+  },
+  
+  getCommitData: (projectId: string) => {
+    const commits = readJSONFile(COMMITS_FILE);
+    return commits.find((c: any) => c.projectId === projectId);
+  },
+  
+  getAllCommitData: () => {
+    return readJSONFile(COMMITS_FILE);
+  }
+};
+
+// 统一的存储接口
+export const storage = {
+  // 项目操作
+  getProjects: () => projectStorage.findAll(),
+  getProject: (id: string) => projectStorage.findById(id),
+  createProject: (data: any) => projectStorage.create(data),
+  updateProject: (id: string, data: any) => projectStorage.update(id, data),
+  deleteProject: (id: string) => projectStorage.delete(id),
+  
+  // 审查记录操作
+  getReviews: (filter?: any) => reviewStorage.findAll(filter),
+  getReview: (id: string) => reviewStorage.findById(id),
+  createReview: (data: any) => reviewStorage.create(data),
+  updateReview: (id: string, data: any) => reviewStorage.update(id, data),
+  deleteReview: (id: string) => reviewStorage.delete(id),
+  
+  // 提交数据操作
+  saveCommitData: (projectId: string, data: any) => commitStorage.saveCommitData(projectId, data),
+  getCommitData: (projectId: string) => commitStorage.getCommitData(projectId),
+  getAllCommitData: () => commitStorage.getAllCommitData()
 }; 

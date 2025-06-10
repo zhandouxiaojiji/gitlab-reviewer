@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
 import reviewRoutes from './routes/reviews';
+import gitlabRoutes from './routes/gitlab';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/gitlab', gitlabRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ message: 'GitLab Review服务器运行正常', status: 'ok' });

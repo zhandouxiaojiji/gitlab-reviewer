@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Settings from './components/Settings';
 import ProjectDetail from './components/ProjectDetail';
+import CodeReview from './components/CodeReview';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -27,6 +28,14 @@ const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/code-review" 
+            element={
+              <ProtectedRoute>
+                <CodeReview />
               </ProtectedRoute>
             } 
           />
