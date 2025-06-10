@@ -1,0 +1,37 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import User, { IUser } from '../models/User';
+
+interface AuthRequest extends Request {
+  user?: IUser;
+}
+
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: '访问令牌缺失' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { userId: string };
+    const user = await User.findById(decoded.userId);
+    
+    if (!user) {
+      return res.status(401).json({ message: '用户不存在' });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(403).json({ message: '无效的访问令牌' });
+  }
+};
+
+export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ message: '需要管理员权限' });
+  }
+  next();
+}; 
