@@ -5,7 +5,8 @@ import {
   ProjectOutlined, 
   SettingOutlined,
   LogoutOutlined,
-  UserOutlined
+  UserOutlined,
+  GitlabOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -53,17 +54,19 @@ const Dashboard: React.FC = () => {
         <div 
           style={{ 
             height: 64, 
-            margin: 16, 
-            background: 'rgba(255, 255, 255, 0.2)',
+            margin: '8px 12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
-            fontSize: '18px',
-            fontWeight: 'bold'
+            fontSize: '16px',
+            fontWeight: '600',
+            borderRadius: '8px',
+            gap: '8px'
           }}
         >
-          GitLab 代码审查
+          <GitlabOutlined style={{ fontSize: '20px' }} />
+          <span>GitLab Review</span>
         </div>
         <Menu
           theme="dark"
