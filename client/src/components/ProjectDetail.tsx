@@ -123,18 +123,26 @@ const ProjectDetail: React.FC = () => {
       }
 
       // 格式化提交数据
-      const formattedCommits = commits.map((commit: any, index: number) => ({
-        key: commit.id || index,
-        id: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
-        commitId: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
-        fullCommitId: commit.id || '',
-        commitMessage: commit.message || '无提交信息',
-        author: commit.author_name || '未知作者',
-        date: commit.committed_date || new Date().toISOString(),
-        hasReview: commit.has_comments || false,
-        reviewer: commit.has_comments ? '系统检测' : '',
-        reviewComments: commit.comments_count || 0
-      }));
+      const formattedCommits = commits.map((commit: any, index: number) => {
+        // 获取第一个评论的作者作为审核人
+        let reviewer = '';
+        if (commit.has_comments && commit.comments && commit.comments.length > 0) {
+          reviewer = commit.comments[0].author?.username || commit.comments[0].author?.name || '';
+        }
+        
+        return {
+          key: commit.id || index,
+          id: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
+          commitId: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
+          fullCommitId: commit.id || '',
+          commitMessage: commit.message || '无提交信息',
+          author: commit.author_name || '未知作者',
+          date: commit.committed_date || new Date().toISOString(),
+          hasReview: commit.has_comments || false,
+          reviewer: reviewer,
+          reviewComments: commit.comments_count || 0
+        };
+      });
 
       setCommits(formattedCommits);
       
@@ -256,19 +264,30 @@ const ProjectDetail: React.FC = () => {
 
   // 批量获取所有用户的昵称
   const loadUserNicknames = async (commits: any[]) => {
+    // 获取所有唯一的作者和审核人
     const uniqueAuthors = Array.from(new Set(commits.map(commit => commit.author_name)));
-    const nicknamePromises = uniqueAuthors.map(async (authorName) => {
-      if (!userNicknames[authorName]) {
-        const nickname = await getUserNickname(authorName);
-        return { authorName, nickname };
+    const uniqueReviewers = Array.from(new Set(
+      commits
+        .filter(commit => commit.has_comments && commit.comments && commit.comments.length > 0)
+        .map(commit => commit.comments[0].author?.username || commit.comments[0].author?.name)
+        .filter(reviewer => reviewer) // 过滤掉空值
+    ));
+    
+    // 合并所有需要获取昵称的用户
+    const allUsers = Array.from(new Set([...uniqueAuthors, ...uniqueReviewers]));
+    
+    const nicknamePromises = allUsers.map(async (username) => {
+      if (!userNicknames[username]) {
+        const nickname = await getUserNickname(username);
+        return { username, nickname };
       }
-      return { authorName, nickname: userNicknames[authorName] };
+      return { username, nickname: userNicknames[username] };
     });
 
     const results = await Promise.all(nicknamePromises);
     const newNicknames: { [key: string]: string } = {};
-    results.forEach(({ authorName, nickname }) => {
-      newNicknames[authorName] = nickname;
+    results.forEach(({ username, nickname }) => {
+      newNicknames[username] = nickname;
     });
 
     setUserNicknames(prev => ({ ...prev, ...newNicknames }));
@@ -354,7 +373,7 @@ const ProjectDetail: React.FC = () => {
           {commit.hasReview && commit.reviewer && (
             <Text type="secondary">
               <CheckCircleOutlined style={{ marginRight: '4px' }} />
-              审核人: {commit.reviewer}
+              审核人: {userNicknames[commit.reviewer] || commit.reviewer}
             </Text>
           )}
         </div>

@@ -38,6 +38,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   
   const [projects, setProjects] = useState<GitLabProject[]>([]);
   const [loading, setLoading] = useState(false);
+  const [userNickname, setUserNickname] = useState<string>('');
 
   useEffect(() => {
     // 如果URL中没有用户名参数，跳转到登录页
@@ -45,6 +46,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       navigate('/login');
     } else {
       loadProjects();
+      loadUserNickname();
     }
   }, [username, navigate]);
 
@@ -57,6 +59,32 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       console.error('加载项目配置失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 获取当前登录用户的昵称
+  const loadUserNickname = async () => {
+    try {
+      if (!username) return;
+      
+      // 获取第一个项目的配置来调用GitLab API
+      const projectsResponse = await api.get('/api/projects');
+      const projects = projectsResponse.data || [];
+      
+      if (projects.length > 0) {
+        const firstProject = projects[0];
+        const response = await api.get(`/api/gitlab/projects/${firstProject.id}/users/${encodeURIComponent(username)}`);
+        if (response.data.user) {
+          setUserNickname(response.data.user.name || username);
+        } else {
+          setUserNickname(username);
+        }
+      } else {
+        setUserNickname(username);
+      }
+    } catch (error) {
+      console.warn('获取用户昵称失败:', error);
+      setUserNickname(username || '');
     }
   };
 
@@ -175,7 +203,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <UserOutlined />
-              <Text strong>{username}</Text>
+              <Text strong>{userNickname || username}</Text>
             </div>
           </div>
           <Button 
