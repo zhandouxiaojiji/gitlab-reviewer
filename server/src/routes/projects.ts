@@ -29,7 +29,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 创建新项目
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
@@ -49,6 +49,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       gitlabUrl,
       accessToken,
       description,
+      reviewers: reviewers || [],
       isActive: true,
       createdBy: req.user.id
     });
@@ -73,7 +74,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 更新项目
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers } = req.body;
     const projectId = req.params.id;
 
     const existingProject = projectStorage.findById(projectId);
@@ -99,6 +100,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       gitlabUrl,
       accessToken,
       description,
+      reviewers: reviewers || [],
       updatedAt: new Date().toISOString()
     });
 
