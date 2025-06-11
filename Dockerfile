@@ -13,6 +13,9 @@ RUN npm ci
 # 复制前端源代码
 COPY client/ ./
 
+# 设置生产环境变量，确保前端使用正确的API配置
+ENV NODE_ENV=production
+
 # 构建前端
 RUN npm run build
 

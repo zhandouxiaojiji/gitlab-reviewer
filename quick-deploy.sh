@@ -70,7 +70,6 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "👤 默认登录信息:"
     echo "   - 用户名: admin"
-    echo "   - 密码:   123456"
     echo ""
     echo "🔧 管理命令:"
     echo "   - 查看日志: docker logs gitlab-reviewer"
