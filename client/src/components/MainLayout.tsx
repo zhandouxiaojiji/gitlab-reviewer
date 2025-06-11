@@ -121,7 +121,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const projectItems = projects.map(project => ({
       key: `project-${project.id}`,
       icon: <GitlabOutlined />,
-      label: project.name,
+      label: project.description || project.name, // 优先显示描述，没有描述则显示项目名称
     }));
 
     const settingsItem = {

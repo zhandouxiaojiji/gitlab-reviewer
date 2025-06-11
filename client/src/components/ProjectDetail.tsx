@@ -160,7 +160,7 @@ const ProjectDetail: React.FC = () => {
         hasReview: true,
         reviewer: '李四',
         reviewComments: 3,
-        gitlabUrl: `${project?.gitlabUrl}/-/commit/abc123ef456789012345678901234567890abcdef`
+        gitlabUrl: `${project?.gitlabUrl}/${project?.name}/-/commit/abc123ef456789012345678901234567890abcdef`
       },
       {
         key: 'demo2',
@@ -173,7 +173,7 @@ const ProjectDetail: React.FC = () => {
         hasReview: false,
         reviewer: '',
         reviewComments: 0,
-        gitlabUrl: `${project?.gitlabUrl}/-/commit/def456gh789012345678901234567890abcdef123`
+        gitlabUrl: `${project?.gitlabUrl}/${project?.name}/-/commit/def456gh789012345678901234567890abcdef123`
       },
       {
         key: 'demo3',
@@ -186,7 +186,7 @@ const ProjectDetail: React.FC = () => {
         hasReview: true,
         reviewer: '钱七',
         reviewComments: 1,
-        gitlabUrl: `${project?.gitlabUrl}/-/commit/ghi789jk012345678901234567890abcdef123456`
+        gitlabUrl: `${project?.gitlabUrl}/${project?.name}/-/commit/ghi789jk012345678901234567890abcdef123456`
       }
     ];
     
@@ -200,7 +200,8 @@ const ProjectDetail: React.FC = () => {
       title: '提交ID',
       dataIndex: 'commitId',
       key: 'commitId',
-      width: 120,
+      width: 100,
+      align: 'center' as const,
       render: (text: string) => (
         <Text code style={{ fontSize: '12px' }}>{text.substring(0, 8)}</Text>
       ),
@@ -210,16 +211,18 @@ const ProjectDetail: React.FC = () => {
       dataIndex: 'commitMessage',
       key: 'commitMessage',
       ellipsis: true,
+      width: 300,
     },
     {
       title: '作者',
       dataIndex: 'author',
       key: 'author',
-      width: 100,
+      width: 120,
+      align: 'center' as const,
       render: (text: string) => (
         <Space>
           <UserOutlined />
-          {text}
+          <span>{text}</span>
         </Space>
       ),
     },
@@ -227,26 +230,53 @@ const ProjectDetail: React.FC = () => {
       title: '时间',
       dataIndex: 'date',
       key: 'date',
-      width: 160,
-      render: (text: string) => (
-        <Space>
-          <CalendarOutlined />
-          {text}
-        </Space>
-      ),
+      width: 180,
+      align: 'center' as const,
+      render: (text: string) => {
+        // 格式化时间为 YYYY-MM-DD HH:mm:ss 格式
+        const formatDate = (dateString: string) => {
+          try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+              return dateString; // 如果无法解析，返回原始字符串
+            }
+            
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+          } catch (error) {
+            return dateString;
+          }
+        };
+
+        return (
+          <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
+            <CalendarOutlined style={{ color: '#1890ff' }} />
+            <Text style={{ fontSize: '12px', lineHeight: '1.2' }}>
+              {formatDate(text)}
+            </Text>
+          </Space>
+        );
+      },
     },
     {
       title: '审查状态',
       dataIndex: 'hasReview',
       key: 'hasReview',
-      width: 100,
+      width: 120,
+      align: 'center' as const,
       render: (hasReview: boolean, record: CommitReview) => (
-        <Space direction="vertical" size="small">
-          <Tag color={hasReview ? 'green' : 'red'}>
+        <Space direction="vertical" size="small" style={{ width: '100%', textAlign: 'center' }}>
+          <Tag color={hasReview ? 'green' : 'red'} style={{ margin: 0 }}>
             {hasReview ? '已审查' : '待审查'}
           </Tag>
           {hasReview && record.reviewer && (
-            <Text type="secondary" style={{ fontSize: '12px' }}>
+            <Text type="secondary" style={{ fontSize: '11px', lineHeight: '1.2' }}>
               审查者: {record.reviewer}
             </Text>
           )}
@@ -258,17 +288,19 @@ const ProjectDetail: React.FC = () => {
       dataIndex: 'reviewComments',
       key: 'reviewComments',
       width: 80,
+      align: 'center' as const,
       render: (count: number) => (
-        <Space>
-          <CommentOutlined />
-          {count}
+        <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
+          <CommentOutlined style={{ color: '#1890ff' }} />
+          <Text style={{ fontSize: '12px', fontWeight: 'bold' }}>{count}</Text>
         </Space>
       ),
     },
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 80,
+      align: 'center' as const,
       render: (_: any, record: CommitReview) => (
         <Button 
           size="small" 
@@ -276,7 +308,8 @@ const ProjectDetail: React.FC = () => {
           onClick={() => {
             // 打开GitLab查看提交详情，使用完整的commit ID
             if (project) {
-              const gitlabCommitUrl = `${project.gitlabUrl}/-/commit/${record.fullCommitId}`;
+              // 构建正确的GitLab提交URL：GitLab地址 + 项目名称 + commit路径
+              const gitlabCommitUrl = `${project.gitlabUrl}/${project.name}/-/commit/${record.fullCommitId}`;
               window.open(gitlabCommitUrl, '_blank');
             }
           }}
@@ -365,11 +398,14 @@ const ProjectDetail: React.FC = () => {
             dataSource={commits}
             rowKey="id"
             loading={loading}
+            size="middle"
+            scroll={{ x: 'max-content' }}
             pagination={{
               pageSize: 10,
               showQuickJumper: true,
               showSizeChanger: true,
               showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
+              pageSizeOptions: ['10', '20', '50'],
             }}
             locale={{
               emptyText: '暂无提交记录'
