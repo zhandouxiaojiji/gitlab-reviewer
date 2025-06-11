@@ -223,43 +223,6 @@ const ProjectDetail: React.FC = () => {
     message.success('已加载演示数据，展示功能界面');
   };
 
-  // 刷新用户映射关系
-  const refreshUserMappings = async () => {
-    if (!project?.id) {
-      message.error('项目信息不存在');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`http://localhost:3001/api/projects/${project.id}/refresh-users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('刷新用户映射关系失败');
-      }
-
-      const data = await response.json();
-      
-      // 更新本地用户映射关系
-      setUserNicknames(data.userMappings || {});
-      
-      message.success(`用户映射关系刷新成功，共更新 ${data.userCount} 个用户`);
-    } catch (error) {
-      console.error('刷新用户映射关系失败:', error);
-      message.error('刷新用户映射关系失败，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 格式化时间函数
   const formatDate = (dateString: string) => {
     try {
@@ -491,25 +454,14 @@ const ProjectDetail: React.FC = () => {
         <Card 
           title="提交记录与审查状态"
           extra={
-            <Space>
-              <Button 
-                type="default" 
-                icon={<UserOutlined />} 
-                onClick={refreshUserMappings}
-                loading={loading}
-                size="small"
-              >
-                刷新用户昵称
-              </Button>
-              <Button 
-                type="primary" 
-                icon={<ReloadOutlined />} 
-                onClick={() => loadCommitReviews(project?.id || '')}
-                loading={loading}
-              >
-                刷新数据
-              </Button>
-            </Space>
+            <Button 
+              type="primary" 
+              icon={<ReloadOutlined />} 
+              onClick={() => loadCommitReviews(project?.id || '')}
+              loading={loading}
+            >
+              刷新数据
+            </Button>
           }
         >
           {error && (

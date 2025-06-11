@@ -125,11 +125,9 @@ export class GitlabUserService {
       
       users.forEach((user: GitlabUser) => {
         if (user.username && user.name) {
+          // 只保存username到name的映射
           userMappings[user.username] = user.name;
-          // 也保存一份以name为key的映射，因为有些提交可能使用display name
-          if (user.name !== user.username) {
-            userMappings[user.name] = user.name;
-          }
+          // 不再保存name到name的重复映射
         }
       });
       

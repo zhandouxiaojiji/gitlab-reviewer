@@ -659,4 +659,46 @@ router.post('/:id/refresh-users', authenticateToken, async (req: AuthRequest, re
   }
 });
 
+// 新增API端点：清理所有项目的重复用户映射关系
+router.post('/cleanup-duplicate-mappings', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const projects = projectStorage.findAll();
+    let totalCleaned = 0;
+    let totalProjects = 0;
+
+    for (const project of projects) {
+      if (project.userMappings) {
+        const originalMappings = project.userMappings;
+        const cleanedMappings: { [username: string]: string } = {};
+        
+        // 清理重复映射关系（避免昵称映射到自身）
+        Object.entries(originalMappings).forEach(([username, nickname]) => {
+          // 只保留username到nickname的映射，跳过nickname到nickname的映射
+          if (username !== nickname && typeof nickname === 'string') {
+            cleanedMappings[username] = nickname;
+          }
+        });
+        
+        const cleanedCount = Object.keys(originalMappings).length - Object.keys(cleanedMappings).length;
+        if (cleanedCount > 0) {
+          projectStorage.updateUserMappings(project.id, cleanedMappings);
+          totalCleaned += cleanedCount;
+          totalProjects++;
+          console.log(`项目 ${project.name} 清理了 ${cleanedCount} 个重复映射关系`);
+        }
+      }
+    }
+
+    res.json({
+      message: '重复用户映射关系清理完成',
+      totalProjects,
+      totalCleaned,
+      details: `共处理 ${totalProjects} 个项目，清理 ${totalCleaned} 个重复映射关系`
+    });
+  } catch (error) {
+    console.error('清理重复映射关系错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+});
+
 export default router; 
