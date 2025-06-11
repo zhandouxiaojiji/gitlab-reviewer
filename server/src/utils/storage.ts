@@ -64,6 +64,7 @@ export const projectStorage = {
     const project = {
       id: generateId(),
       ...projectData,
+      userMappings: {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -79,6 +80,22 @@ export const projectStorage = {
       projects[index] = { 
         ...projects[index], 
         ...updateData, 
+        updatedAt: new Date().toISOString() 
+      };
+      writeJSONFile(PROJECTS_FILE, projects);
+      return projects[index];
+    }
+    return null;
+  },
+  
+  // 更新项目的用户映射关系
+  updateUserMappings: (id: string, userMappings: { [username: string]: string }) => {
+    const projects = readJSONFile(PROJECTS_FILE);
+    const index = projects.findIndex(p => p.id === id);
+    if (index !== -1) {
+      projects[index] = { 
+        ...projects[index], 
+        userMappings,
         updatedAt: new Date().toISOString() 
       };
       writeJSONFile(PROJECTS_FILE, projects);

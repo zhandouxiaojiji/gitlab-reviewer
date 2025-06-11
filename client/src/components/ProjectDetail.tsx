@@ -55,8 +55,11 @@ const ProjectDetail: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userNicknames, setUserNicknames] = useState<{ [username: string]: string }>({});
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    if (isInitialized) return; // 防止重复加载
+    
     if (!username) {
       navigate('/login');
       return;
@@ -65,8 +68,10 @@ const ProjectDetail: React.FC = () => {
       navigate(`/dashboard?user=${username}`);
       return;
     }
+    
+    setIsInitialized(true);
     loadProjects();
-  }, [username, projectName, navigate]);
+  }, [username, projectName]); // 移除navigate依赖
 
   const loadProjects = async () => {
     try {
@@ -90,6 +95,8 @@ const ProjectDetail: React.FC = () => {
   };
 
   const loadCommitReviews = async (projectId: string) => {
+    if (loading) return; // 防止重复加载
+    
     setLoading(true);
     try {
       if (!projectId) {
@@ -97,7 +104,6 @@ const ProjectDetail: React.FC = () => {
       }
 
       const token = localStorage.getItem('token');
-      console.log('开始获取项目提交记录...', { projectId, token: token ? '有token' : '无token' });
 
       const response = await fetch(`http://localhost:3001/api/gitlab/projects/${projectId}/commits`, {
         method: 'GET',
@@ -106,8 +112,6 @@ const ProjectDetail: React.FC = () => {
           'Authorization': `Bearer ${token}`
         }
       });
-
-      console.log('API响应状态:', response.status);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -121,10 +125,13 @@ const ProjectDetail: React.FC = () => {
       }
 
       const data = await response.json();
-      console.log('API返回数据:', data);
 
       // 处理提交数据
       const commits = data.commits || [];
+      
+      // 直接从后端获取用户映射关系
+      const backendUserMappings = data.userMappings || {};
+      setUserNicknames(backendUserMappings);
       
       if (commits.length === 0) {
         setError('该项目暂无提交记录');
@@ -155,15 +162,6 @@ const ProjectDetail: React.FC = () => {
       });
 
       setCommits(formattedCommits);
-      
-      // 加载用户昵称 - 传递格式化后的commits数据
-      console.log('准备调用loadUserNicknames，格式化后的提交数据:', formattedCommits);
-      try {
-        await loadUserNicknames(formattedCommits);
-        console.log('loadUserNicknames调用完成');
-      } catch (nicknameError) {
-        console.error('调用loadUserNicknames时出错:', nicknameError);
-      }
       
       message.success(`成功加载 ${formattedCommits.length} 条提交记录`);
 
@@ -225,6 +223,43 @@ const ProjectDetail: React.FC = () => {
     message.success('已加载演示数据，展示功能界面');
   };
 
+  // 刷新用户映射关系
+  const refreshUserMappings = async () => {
+    if (!project?.id) {
+      message.error('项目信息不存在');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`http://localhost:3001/api/projects/${project.id}/refresh-users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('刷新用户映射关系失败');
+      }
+
+      const data = await response.json();
+      
+      // 更新本地用户映射关系
+      setUserNicknames(data.userMappings || {});
+      
+      message.success(`用户映射关系刷新成功，共更新 ${data.userCount} 个用户`);
+    } catch (error) {
+      console.error('刷新用户映射关系失败:', error);
+      message.error('刷新用户映射关系失败，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 格式化时间函数
   const formatDate = (dateString: string) => {
     try {
@@ -252,86 +287,8 @@ const ProjectDetail: React.FC = () => {
     message.success('提交ID已复制到剪贴板');
   };
 
-  // 获取GitLab用户昵称
-  const getUserNickname = useCallback(async (authorName: string): Promise<string> => {
-    console.log(`开始获取用户昵称: ${authorName}`);
-
-    try {
-      if (!project?.id) {
-        console.log(`项目ID不存在，返回原用户名: ${authorName}`);
-        return authorName;
-      }
-      
-      const apiUrl = `/api/gitlab/projects/${project.id}/users/${encodeURIComponent(authorName)}`;
-      console.log(`调用用户API: ${apiUrl}`);
-      
-      const response = await api.get(apiUrl);
-      console.log(`用户API响应:`, response.data);
-      
-      if (response.data.user) {
-        const nickname = response.data.user.name || authorName;
-        console.log(`获取到用户昵称: ${authorName} -> ${nickname}`);
-        return nickname;
-      } else {
-        console.log(`用户API返回空数据，使用原用户名: ${authorName}`);
-      }
-    } catch (error) {
-      console.warn(`获取用户 ${authorName} 的昵称失败:`, error);
-    }
-    
-    // 如果获取失败，使用用户名
-    console.log(`返回原用户名: ${authorName}`);
-    return authorName;
-  }, [project?.id]);
-
-  // 批量获取所有用户的昵称
-  const loadUserNicknames = useCallback(async (commits: CommitReview[]) => {
-    console.log('开始批量获取用户昵称，提交数据:', commits);
-    
-    // 从格式化后的数据获取所有唯一的作者和审核人
-    const uniqueAuthors = Array.from(new Set(commits.map(commit => commit.author).filter(author => author)));
-    const uniqueReviewers = Array.from(new Set(
-      commits
-        .filter(commit => commit.hasReview && commit.reviewer)
-        .map(commit => commit.reviewer!)
-        .filter(reviewer => reviewer) // 过滤掉空值
-    ));
-    
-    console.log('唯一作者列表:', uniqueAuthors);
-    console.log('唯一审核人列表:', uniqueReviewers);
-    
-    // 合并所有需要获取昵称的用户
-    const allUsers = Array.from(new Set([...uniqueAuthors, ...uniqueReviewers]));
-    console.log('需要获取昵称的所有用户:', allUsers);
-    
-    // 为每个用户逐个获取昵称，并立即更新状态
-    for (const username of allUsers) {
-      console.log(`为用户 ${username} 获取昵称...`);
-      try {
-        const nickname = await getUserNickname(username);
-        console.log(`获取到昵称 ${username} -> ${nickname}`);
-        
-        // 立即更新状态
-        setUserNicknames(prev => {
-          const updated = { ...prev, [username]: nickname };
-          console.log('更新用户昵称状态:', updated);
-          return updated;
-        });
-      } catch (error) {
-        console.error(`获取用户 ${username} 昵称失败:`, error);
-      }
-    }
-    
-    console.log('批量获取昵称完成');
-  }, [getUserNickname]);
-
   // 删除原来的 columns 定义，替换为列表渲染函数
   const renderCommitItem = (commit: CommitReview) => {
-    // 调试：输出当前渲染的用户和昵称映射
-    console.log(`渲染提交项 - 作者: ${commit.author}, 审核人: ${commit.reviewer}`);
-    console.log(`当前昵称映射:`, userNicknames);
-    console.log(`作者昵称: ${userNicknames[commit.author] || '未找到'}, 审核人昵称: ${commit.reviewer ? (userNicknames[commit.reviewer] || '未找到') : '无审核人'}`);
-    
     return (
     <div
       className="commit-item"
@@ -534,14 +491,25 @@ const ProjectDetail: React.FC = () => {
         <Card 
           title="提交记录与审查状态"
           extra={
-            <Button 
-              type="primary" 
-              icon={<ReloadOutlined />} 
-              onClick={() => loadCommitReviews(project?.id || '')}
-              loading={loading}
-            >
-              刷新数据
-            </Button>
+            <Space>
+              <Button 
+                type="default" 
+                icon={<UserOutlined />} 
+                onClick={refreshUserMappings}
+                loading={loading}
+                size="small"
+              >
+                刷新用户昵称
+              </Button>
+              <Button 
+                type="primary" 
+                icon={<ReloadOutlined />} 
+                onClick={() => loadCommitReviews(project?.id || '')}
+                loading={loading}
+              >
+                刷新数据
+              </Button>
+            </Space>
           }
         >
           {error && (

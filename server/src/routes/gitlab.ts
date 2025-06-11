@@ -20,6 +20,7 @@ interface Project {
   createdAt?: string;
   updatedAt?: string;
   isActive?: boolean;
+  userMappings?: Record<string, string>;
 }
 
 // 获取项目的提交记录
@@ -239,8 +240,13 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
 
     console.log(`成功处理 ${commitsWithComments.length} 条提交记录`);
 
+    // 获取项目的用户映射关系
+    const userMappings = project.userMappings || {};
+    console.log(`项目 ${project.name} 的用户映射关系:`, userMappings);
+
     res.json({
       commits: commitsWithComments,
+      userMappings: userMappings,
       total: response.headers['x-total'] || commitsWithComments.length,
       total_pages: response.headers['x-total-pages'] || 1,
       current_page: parseInt(page.toString()),

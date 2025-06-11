@@ -2,6 +2,7 @@ import express from 'express';
 import { Response, NextFunction } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { projectStorage } from '../utils/storage';
+import { GitlabUserService } from '../services/gitlabUserService';
 import axios from 'axios';
 
 // 定义AuthRequest接口
@@ -52,6 +53,16 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       createdBy: req.user.id
     });
 
+    // 异步获取用户映射关系（不阻塞响应）
+    setTimeout(async () => {
+      try {
+        console.log(`开始为新创建的项目 ${project.name} 获取用户映射关系...`);
+        await GitlabUserService.updateProjectUserMappings(project.id);
+      } catch (error) {
+        console.error(`为项目 ${project.name} 获取用户映射关系失败:`, error);
+      }
+    }, 100);
+
     res.status(201).json(project);
   } catch (error) {
     console.error('创建项目错误:', error);
@@ -90,6 +101,20 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       description,
       updatedAt: new Date().toISOString()
     });
+
+    // 如果GitLab配置有变化，重新获取用户映射关系
+    if (existingProject.gitlabUrl !== gitlabUrl || 
+        existingProject.accessToken !== accessToken || 
+        existingProject.name !== name) {
+      setTimeout(async () => {
+        try {
+          console.log(`项目配置已更新，重新获取用户映射关系: ${updatedProject.name}`);
+          await GitlabUserService.updateProjectUserMappings(projectId);
+        } catch (error) {
+          console.error(`为项目 ${updatedProject.name} 重新获取用户映射关系失败:`, error);
+        }
+      }, 100);
+    }
 
     res.json(updatedProject);
   } catch (error) {
@@ -601,6 +626,35 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     res.json(project);
   } catch (error) {
     console.error('获取项目详情错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+});
+
+// 添加新的API端点：手动刷新用户映射关系
+router.post('/:id/refresh-users', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    
+    const project = projectStorage.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    console.log(`手动刷新项目 ${project.name} 的用户映射关系...`);
+    const success = await GitlabUserService.updateProjectUserMappings(projectId);
+    
+    if (success) {
+      const updatedProject = projectStorage.findById(projectId);
+      res.json({ 
+        message: '用户映射关系刷新成功',
+        userMappings: updatedProject?.userMappings || {},
+        userCount: Object.keys(updatedProject?.userMappings || {}).length
+      });
+    } else {
+      res.status(500).json({ message: '用户映射关系刷新失败' });
+    }
+  } catch (error) {
+    console.error('刷新用户映射关系错误:', error);
     res.status(500).json({ message: '服务器内部错误' });
   }
 });
