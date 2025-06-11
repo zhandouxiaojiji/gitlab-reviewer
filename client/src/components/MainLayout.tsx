@@ -162,75 +162,134 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider trigger={null} collapsible style={{ display: 'flex', flexDirection: 'column' }}>
-        <div 
+    <>
+      <style>
+        {`
+          .custom-sider.ant-layout-sider {
+            display: flex !important;
+            flex-direction: column !important;
+            height: 100vh !important;
+            position: fixed !important;
+          }
+          .custom-sider .ant-menu {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            border: none !important;
+            background: transparent !important;
+          }
+          .user-info-bottom {
+            position: absolute !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            flex-shrink: 0 !important;
+          }
+          .menu-container {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            padding-bottom: 120px !important; /* 为底部用户信息预留空间 */
+          }
+        `}
+      </style>
+      <Layout style={{ minHeight: '100vh' }}>
+        <Sider 
+          trigger={null} 
+          collapsible 
+          className="custom-sider"
           style={{ 
-            height: 64, 
-            margin: '8px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontSize: '16px',
-            fontWeight: '600',
-            borderRadius: '8px',
-            gap: '8px'
+            display: 'flex', 
+            flexDirection: 'column',
+            height: '100vh',
+            position: 'fixed',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            zIndex: 1000
           }}
         >
-          <GitlabOutlined style={{ fontSize: '20px' }} />
-          <span>GitLab Review</span>
-        </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[getSelectedKey()]}
-          onClick={({ key }) => handleMenuClick(key)}
-          items={getMenuItems()}
-          style={{ flex: 1, border: 'none' }}
-        />
-        
-        {/* 底部用户信息和退出登录 */}
-        <div style={{ 
-          padding: '16px 12px',
-          borderTop: '1px solid #434343',
-          backgroundColor: '#001529',
-          marginTop: 'auto'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px',
-            marginBottom: '12px',
-            color: 'rgba(255, 255, 255, 0.85)'
-          }}>
-            <UserOutlined style={{ color: 'rgba(255, 255, 255, 0.65)' }} />
-            <Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '14px' }}>
-              {userNickname || username}
-            </Text>
-          </div>
-          <Button 
-            type="default"
-            size="small"
-            icon={<LogoutOutlined />} 
-            onClick={handleLogout}
+          {/* 顶部Logo区域 */}
+          <div 
             style={{ 
-              width: '100%',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              borderColor: 'rgba(255, 255, 255, 0.2)',
-              color: 'rgba(255, 255, 255, 0.85)'
+              height: 64, 
+              margin: '8px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: '16px',
+              fontWeight: '600',
+              borderRadius: '8px',
+              gap: '8px',
+              flexShrink: 0
             }}
           >
-            退出登录
-          </Button>
-        </div>
-      </Sider>
-      <Layout>
-        <Content style={{ padding: '16px' }}>
-          {children}
-        </Content>
+            <GitlabOutlined style={{ fontSize: '20px' }} />
+            <span>GitLab Review</span>
+          </div>
+          
+          {/* 中间菜单容器 - 自动填充剩余空间 */}
+          <div className="menu-container">
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={[getSelectedKey()]}
+              onClick={({ key }) => handleMenuClick(key)}
+              items={getMenuItems()}
+              style={{ 
+                border: 'none',
+                backgroundColor: 'transparent'
+              }}
+            />
+          </div>
+          
+          {/* 底部用户信息区域 - 绝对定位 */}
+          <div 
+            className="user-info-bottom"
+            style={{ 
+              padding: '16px 12px',
+              borderTop: '1px solid #434343',
+              backgroundColor: '#001529',
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0
+            }}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px',
+              marginBottom: '12px',
+              color: 'rgba(255, 255, 255, 0.85)'
+            }}>
+              <UserOutlined style={{ color: 'rgba(255, 255, 255, 0.65)' }} />
+              <Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '14px' }}>
+                {userNickname || username}
+              </Text>
+            </div>
+            <Button 
+              type="default"
+              size="small"
+              icon={<LogoutOutlined />} 
+              onClick={handleLogout}
+              style={{ 
+                width: '100%',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderColor: 'rgba(255, 255, 255, 0.2)',
+                color: 'rgba(255, 255, 255, 0.85)'
+              }}
+            >
+              退出登录
+            </Button>
+          </div>
+        </Sider>
+        <Layout style={{ marginLeft: 200 }}>
+          <Content style={{ padding: '16px' }}>
+            {children}
+          </Content>
+        </Layout>
       </Layout>
-    </Layout>
+    </>
   );
 };
 
