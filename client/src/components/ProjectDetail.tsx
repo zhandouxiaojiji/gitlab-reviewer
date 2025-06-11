@@ -26,6 +26,8 @@ interface GitLabProject {
   gitlabUrl: string;
   accessToken: string;
   description?: string;
+  reviewers?: string[]; // 审核人员用户名列表
+  userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   createdAt: string;
 }
 
@@ -334,6 +336,37 @@ const ProjectDetail: React.FC = () => {
           )}
         </div>
 
+        {/* 审核人员信息 */}
+        {project?.reviewers && project.reviewers.length > 0 && (
+          <div style={{ marginBottom: '12px' }}>
+            <Text type="secondary" style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>
+              需要审核人员:
+            </Text>
+            <Space wrap size={[4, 4]}>
+              {project.reviewers
+                .filter(reviewer => reviewer !== commit.author) // 排除提交人自己
+                .map(reviewer => {
+                  const hasReviewed = commit.hasReview && commit.reviewer === reviewer;
+                  return (
+                    <Tag 
+                      key={reviewer} 
+                      color={hasReviewed ? "green" : "default"}
+                      style={{ fontSize: '11px', margin: '2px' }}
+                    >
+                      {userNicknames[reviewer] || reviewer}
+                      {hasReviewed && ' ✓'}
+                    </Tag>
+                  );
+                })}
+            </Space>
+            {project.reviewers.filter(reviewer => reviewer !== commit.author).length === 0 && (
+              <Text type="secondary" style={{ fontSize: '11px' }}>
+                提交人是唯一审核人员，无需其他人审核
+              </Text>
+            )}
+          </div>
+        )}
+
         {/* 底部：提交ID和操作按钮 */}
         <div style={{ 
           display: 'flex', 
@@ -397,9 +430,36 @@ const ProjectDetail: React.FC = () => {
     return <MainLayout><div>加载中...</div></MainLayout>;
   }
 
-  const reviewedCount = commits.filter(c => c.hasReview).length;
-  const totalCount = commits.length;
-  const reviewRate = totalCount > 0 ? ((reviewedCount / totalCount) * 100).toFixed(1) : '0';
+  // 更新审核覆盖率计算逻辑
+  const calculateReviewStats = () => {
+    if (!project.reviewers || project.reviewers.length === 0) {
+      // 如果没有配置审核人员，使用原来的逻辑
+      const reviewedCount = commits.filter(c => c.hasReview).length;
+      const totalCount = commits.length;
+      const reviewRate = totalCount > 0 ? ((reviewedCount / totalCount) * 100).toFixed(1) : '0';
+      return { reviewedCount, totalCount, reviewRate };
+    }
+
+    // 如果配置了审核人员，需要计算每个提交需要的审核人员数量
+    let reviewedCount = 0;
+    const totalCount = commits.length;
+
+    commits.forEach(commit => {
+      const requiredReviewers = project.reviewers!.filter(reviewer => reviewer !== commit.author);
+      if (requiredReviewers.length === 0) {
+        // 如果提交人是唯一的审核人员，则认为不需要审核
+        reviewedCount++;
+      } else if (commit.hasReview) {
+        // 目前只支持单人审核，后续可以扩展为多人审核
+        reviewedCount++;
+      }
+    });
+
+    const reviewRate = totalCount > 0 ? ((reviewedCount / totalCount) * 100).toFixed(1) : '0';
+    return { reviewedCount, totalCount, reviewRate };
+  };
+
+  const { reviewedCount, totalCount, reviewRate } = calculateReviewStats();
 
   return (
     <MainLayout>
@@ -437,6 +497,21 @@ const ProjectDetail: React.FC = () => {
                   <Text>{project.description}</Text>
                 </div>
               )}
+              <div>
+                <Text type="secondary">审核人员:</Text>
+                <br />
+                {project.reviewers && project.reviewers.length > 0 ? (
+                  <Space wrap>
+                    {project.reviewers.map(username => (
+                      <Tag key={username} color="blue">
+                        {userNicknames[username] || username}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Text type="secondary">未配置</Text>
+                )}
+              </div>
               <div>
                 <Text type="secondary">审查覆盖率:</Text>
                 <br />

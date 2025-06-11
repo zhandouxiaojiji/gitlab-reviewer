@@ -10,7 +10,9 @@ import {
   Modal,
   Popconfirm,
   Typography,
-  Divider
+  Divider,
+  Select,
+  Tag
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -33,6 +35,8 @@ interface GitLabProject {
   gitlabUrl: string;
   accessToken: string;
   description?: string;
+  reviewers?: string[]; // 审核人员用户名列表
+  userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   createdAt: string;
 }
 
@@ -45,6 +49,8 @@ const Settings: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProject, setEditingProject] = useState<GitLabProject | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<string[]>([]); // 可选用户列表
+  const [loadingUsers, setLoadingUsers] = useState(false); // 加载用户状态
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -67,15 +73,38 @@ const Settings: React.FC = () => {
     }
   };
 
+  // 加载项目的用户列表
+  const loadProjectUsers = async (project: GitLabProject) => {
+    if (!project.userMappings) return;
+    
+    setLoadingUsers(true);
+    try {
+      // 从项目的用户映射关系中获取用户列表
+      const users = Object.keys(project.userMappings);
+      setAvailableUsers(users);
+    } catch (error) {
+      console.error('加载项目用户失败:', error);
+      message.error('加载项目用户失败');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
   const handleAddProject = () => {
     setEditingProject(null);
+    setAvailableUsers([]);
     form.resetFields();
     setModalVisible(true);
   };
 
   const handleEditProject = (project: GitLabProject) => {
     setEditingProject(project);
-    form.setFieldsValue(project);
+    form.setFieldsValue({
+      ...project,
+      reviewers: project.reviewers || []
+    });
+    // 加载项目用户列表
+    loadProjectUsers(project);
     setModalVisible(true);
   };
 
@@ -180,6 +209,26 @@ const Settings: React.FC = () => {
           <Text code>{text ? '••••••••••••' + text.slice(-4) : ''}</Text>
         </Space>
       ),
+    },
+    {
+      title: '审核人员',
+      dataIndex: 'reviewers',
+      key: 'reviewers',
+      render: (reviewers: string[], record: GitLabProject) => {
+        if (!reviewers || reviewers.length === 0) {
+          return <Text type="secondary">未配置</Text>;
+        }
+        
+        return (
+          <Space wrap>
+            {reviewers.map(username => (
+              <Tag key={username} color="blue">
+                {record.userMappings?.[username] || username}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: '描述',
@@ -301,6 +350,26 @@ const Settings: React.FC = () => {
             rules={[{ required: true, message: '请输入Access Token' }]}
           >
             <Input.Password placeholder="GitLab Personal Access Token" />
+          </Form.Item>
+
+          <Form.Item
+            label="审核人员"
+            name="reviewers"
+            help="选择需要审核代码的人员，每条提交都需要所有审核人员审核"
+          >
+            <Select
+              mode="multiple"
+              placeholder="请选择审核人员"
+              loading={loadingUsers}
+              disabled={!editingProject || availableUsers.length === 0}
+              notFoundContent={!editingProject ? "请先保存项目后再配置审核人员" : "暂无可选用户"}
+            >
+              {availableUsers.map(username => (
+                <Select.Option key={username} value={username}>
+                  {editingProject?.userMappings?.[username] || username}
+                </Select.Option>
+              ))}
+            </Select>
           </Form.Item>
 
           <Form.Item

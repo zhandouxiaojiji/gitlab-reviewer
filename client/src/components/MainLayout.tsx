@@ -25,6 +25,8 @@ interface GitLabProject {
   gitlabUrl: string;
   accessToken: string;
   description?: string;
+  reviewers?: string[]; // 审核人员用户名列表
+  userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   createdAt: string;
 }
 

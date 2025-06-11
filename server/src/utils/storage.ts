@@ -65,6 +65,7 @@ export const projectStorage = {
       id: generateId(),
       ...projectData,
       userMappings: {},
+      reviewers: projectData.reviewers || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
