@@ -258,29 +258,34 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <div style={{ 
               display: 'flex', 
               alignItems: 'center', 
-              gap: '8px',
-              marginBottom: '12px',
+              justifyContent: 'space-between',
               color: 'rgba(255, 255, 255, 0.85)'
             }}>
-              <UserOutlined style={{ color: 'rgba(255, 255, 255, 0.65)' }} />
-              <Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '14px' }}>
-                {userNickname || username}
-              </Text>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px'
+              }}>
+                <UserOutlined style={{ color: 'rgba(255, 255, 255, 0.65)' }} />
+                <Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '14px' }}>
+                  {userNickname || username}
+                </Text>
+              </div>
+              <Button 
+                type="text"
+                size="small"
+                icon={<LogoutOutlined />} 
+                onClick={handleLogout}
+                style={{ 
+                  color: 'rgba(255, 255, 255, 0.65)',
+                  border: 'none',
+                  padding: '4px',
+                  minWidth: 'auto',
+                  height: 'auto'
+                }}
+                title="退出登录"
+              />
             </div>
-            <Button 
-              type="default"
-              size="small"
-              icon={<LogoutOutlined />} 
-              onClick={handleLogout}
-              style={{ 
-                width: '100%',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-                color: 'rgba(255, 255, 255, 0.85)'
-              }}
-            >
-              退出登录
-            </Button>
           </div>
         </Sider>
         <Layout style={{ marginLeft: 200 }}>
