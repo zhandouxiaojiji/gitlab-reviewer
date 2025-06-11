@@ -112,7 +112,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           const projectId = key.replace('project-', '');
           const project = projects.find(p => p.id === projectId);
           if (project) {
-            navigate(`/project?user=${username}&project=${encodeURIComponent(project.name)}&id=${projectId}`);
+            navigate(`/project?user=${username}&project=${encodeURIComponent(project.name)}`);
           }
         }
         break;

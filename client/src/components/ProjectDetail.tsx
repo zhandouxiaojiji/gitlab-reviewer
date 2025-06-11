@@ -48,8 +48,8 @@ const ProjectDetail: React.FC = () => {
   const navigate = useNavigate();
   const username = searchParams.get('user');
   const projectName = searchParams.get('project');
-  const projectId = searchParams.get('id');
   
+  const [projects, setProjects] = useState<GitLabProject[]>([]);
   const [project, setProject] = useState<GitLabProject | null>(null);
   const [commits, setCommits] = useState<CommitReview[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,25 +61,35 @@ const ProjectDetail: React.FC = () => {
       navigate('/login');
       return;
     }
-    if (!projectId) {
+    if (!projectName) {
       navigate(`/dashboard?user=${username}`);
       return;
     }
-    loadProjectDetail();
-    loadCommitReviews();
-  }, [username, projectId, navigate]);
+    loadProjects();
+  }, [username, projectName, navigate]);
 
-  const loadProjectDetail = async () => {
+  const loadProjects = async () => {
     try {
-      const response = await api.get(`/api/projects/${projectId}`);
-      setProject(response.data);
+      const response = await api.get('/api/projects');
+      const projectsData = response.data || [];
+      setProjects(projectsData);
+      
+      // 根据项目名称查找项目
+      const foundProject = projectsData.find((p: GitLabProject) => p.name === decodeURIComponent(projectName!));
+      if (foundProject) {
+        setProject(foundProject);
+        loadCommitReviews(foundProject.id);
+      } else {
+        message.error('未找到指定项目');
+        navigate(`/dashboard?user=${username}`);
+      }
     } catch (error) {
       message.error('加载项目信息失败');
       navigate(`/dashboard?user=${username}`);
     }
   };
 
-  const loadCommitReviews = async () => {
+  const loadCommitReviews = async (projectId: string) => {
     setLoading(true);
     try {
       if (!projectId) {
@@ -244,7 +254,11 @@ const ProjectDetail: React.FC = () => {
     }
 
     try {
-      const response = await api.get(`/api/gitlab/projects/${projectId}/users/${encodeURIComponent(authorName)}`);
+      if (!project?.id) {
+        return authorName;
+      }
+      
+      const response = await api.get(`/api/gitlab/projects/${project.id}/users/${encodeURIComponent(authorName)}`);
       if (response.data.user) {
         const nickname = response.data.user.name || authorName;
         // 更新缓存
@@ -498,7 +512,7 @@ const ProjectDetail: React.FC = () => {
             <Button 
               type="primary" 
               icon={<ReloadOutlined />} 
-              onClick={loadCommitReviews}
+              onClick={() => loadCommitReviews(project?.id || '')}
               loading={loading}
             >
               刷新数据
