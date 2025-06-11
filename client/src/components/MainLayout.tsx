@@ -100,9 +100,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       case 'dashboard':
         navigate(`/dashboard?user=${username}`);
         break;
-      case 'code-review':
-        navigate(`/code-review?user=${username}`);
-        break;
       case 'settings':
         navigate(`/settings?user=${username}`);
         break;
@@ -122,7 +119,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // 根据当前路径确定选中的菜单项
   const getSelectedKey = () => {
     if (location.pathname.includes('/settings')) return 'settings';
-    if (location.pathname.includes('/code-review')) return 'code-review';
     if (location.pathname.includes('/project') && projectName) {
       const project = projects.find(p => p.name === decodeURIComponent(projectName));
       return project ? `project-${project.id}` : 'dashboard';
@@ -137,11 +133,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         key: 'dashboard',
         icon: <DashboardOutlined />,
         label: '仪表盘',
-      },
-      {
-        key: 'code-review',
-        icon: <CodeOutlined />,
-        label: '代码审查',
       }
     ];
 
