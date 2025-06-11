@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider } from 'antd';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
@@ -156,8 +156,14 @@ const ProjectDetail: React.FC = () => {
 
       setCommits(formattedCommits);
       
-      // 加载用户昵称
-      await loadUserNicknames(commits);
+      // 加载用户昵称 - 传递格式化后的commits数据
+      console.log('准备调用loadUserNicknames，格式化后的提交数据:', formattedCommits);
+      try {
+        await loadUserNicknames(formattedCommits);
+        console.log('loadUserNicknames调用完成');
+      } catch (nicknameError) {
+        console.error('调用loadUserNicknames时出错:', nicknameError);
+      }
       
       message.success(`成功加载 ${formattedCommits.length} 条提交记录`);
 
@@ -247,68 +253,86 @@ const ProjectDetail: React.FC = () => {
   };
 
   // 获取GitLab用户昵称
-  const getUserNickname = async (authorName: string): Promise<string> => {
-    // 如果已经缓存了昵称，直接返回
-    if (userNicknames[authorName]) {
-      return userNicknames[authorName];
-    }
+  const getUserNickname = useCallback(async (authorName: string): Promise<string> => {
+    console.log(`开始获取用户昵称: ${authorName}`);
 
     try {
       if (!project?.id) {
+        console.log(`项目ID不存在，返回原用户名: ${authorName}`);
         return authorName;
       }
       
-      const response = await api.get(`/api/gitlab/projects/${project.id}/users/${encodeURIComponent(authorName)}`);
+      const apiUrl = `/api/gitlab/projects/${project.id}/users/${encodeURIComponent(authorName)}`;
+      console.log(`调用用户API: ${apiUrl}`);
+      
+      const response = await api.get(apiUrl);
+      console.log(`用户API响应:`, response.data);
+      
       if (response.data.user) {
         const nickname = response.data.user.name || authorName;
-        // 更新缓存
-        setUserNicknames(prev => ({
-          ...prev,
-          [authorName]: nickname
-        }));
+        console.log(`获取到用户昵称: ${authorName} -> ${nickname}`);
         return nickname;
+      } else {
+        console.log(`用户API返回空数据，使用原用户名: ${authorName}`);
       }
     } catch (error) {
       console.warn(`获取用户 ${authorName} 的昵称失败:`, error);
     }
     
     // 如果获取失败，使用用户名
+    console.log(`返回原用户名: ${authorName}`);
     return authorName;
-  };
+  }, [project?.id]);
 
   // 批量获取所有用户的昵称
-  const loadUserNicknames = async (commits: any[]) => {
-    // 获取所有唯一的作者和审核人
-    const uniqueAuthors = Array.from(new Set(commits.map(commit => commit.author_name)));
+  const loadUserNicknames = useCallback(async (commits: CommitReview[]) => {
+    console.log('开始批量获取用户昵称，提交数据:', commits);
+    
+    // 从格式化后的数据获取所有唯一的作者和审核人
+    const uniqueAuthors = Array.from(new Set(commits.map(commit => commit.author).filter(author => author)));
     const uniqueReviewers = Array.from(new Set(
       commits
-        .filter(commit => commit.has_comments && commit.comments && commit.comments.length > 0)
-        .map(commit => commit.comments[0].author?.username || commit.comments[0].author?.name)
+        .filter(commit => commit.hasReview && commit.reviewer)
+        .map(commit => commit.reviewer!)
         .filter(reviewer => reviewer) // 过滤掉空值
     ));
     
+    console.log('唯一作者列表:', uniqueAuthors);
+    console.log('唯一审核人列表:', uniqueReviewers);
+    
     // 合并所有需要获取昵称的用户
     const allUsers = Array.from(new Set([...uniqueAuthors, ...uniqueReviewers]));
+    console.log('需要获取昵称的所有用户:', allUsers);
     
-    const nicknamePromises = allUsers.map(async (username) => {
-      if (!userNicknames[username]) {
+    // 为每个用户逐个获取昵称，并立即更新状态
+    for (const username of allUsers) {
+      console.log(`为用户 ${username} 获取昵称...`);
+      try {
         const nickname = await getUserNickname(username);
-        return { username, nickname };
+        console.log(`获取到昵称 ${username} -> ${nickname}`);
+        
+        // 立即更新状态
+        setUserNicknames(prev => {
+          const updated = { ...prev, [username]: nickname };
+          console.log('更新用户昵称状态:', updated);
+          return updated;
+        });
+      } catch (error) {
+        console.error(`获取用户 ${username} 昵称失败:`, error);
       }
-      return { username, nickname: userNicknames[username] };
-    });
-
-    const results = await Promise.all(nicknamePromises);
-    const newNicknames: { [key: string]: string } = {};
-    results.forEach(({ username, nickname }) => {
-      newNicknames[username] = nickname;
-    });
-
-    setUserNicknames(prev => ({ ...prev, ...newNicknames }));
-  };
+    }
+    
+    console.log('批量获取昵称完成');
+  }, [getUserNickname]);
 
   // 删除原来的 columns 定义，替换为列表渲染函数
-  const renderCommitItem = (commit: CommitReview) => (
+  const renderCommitItem = (commit: CommitReview) => {
+    // 调试：输出当前渲染的用户和昵称映射
+    console.log(`渲染提交项 - 作者: ${commit.author}, 审核人: ${commit.reviewer}`);
+    console.log(`当前昵称映射:`, userNicknames);
+    console.log(`作者昵称: ${userNicknames[commit.author] || '未找到'}, 审核人昵称: ${commit.reviewer ? (userNicknames[commit.reviewer] || '未找到') : '无审核人'}`);
+    
+    return (
     <div
       className="commit-item"
       style={{
@@ -448,7 +472,8 @@ const ProjectDetail: React.FC = () => {
         </div>
       </div>
     </div>
-  );
+  )
+  };
 
   if (!project) {
     return <MainLayout><div>加载中...</div></MainLayout>;
