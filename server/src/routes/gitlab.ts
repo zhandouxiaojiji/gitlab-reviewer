@@ -365,4 +365,100 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
   }
 });
 
+// 获取GitLab用户信息（根据用户名获取显示名称）
+router.get('/projects/:projectId/users/:username', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { projectId, username } = req.params;
+
+    // 获取项目配置
+    const projects = await storage.getProjects();
+    const project = projects.find((p: Project) => p.id === projectId);
+    
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 验证和标准化GitLab URL
+    let gitlabBaseUrl = project.gitlabUrl.replace(/\/$/, '');
+    
+    if (!gitlabBaseUrl.startsWith('http://') && !gitlabBaseUrl.startsWith('https://')) {
+      gitlabBaseUrl = 'http://' + gitlabBaseUrl;
+    }
+
+    const urlParts = new URL(gitlabBaseUrl);
+    const cleanGitlabUrl = `${urlParts.protocol}//${urlParts.host}`;
+
+    // 构建GitLab用户搜索API URL
+    const apiUrl = `${cleanGitlabUrl}/api/v4/users`;
+    
+    console.log('搜索GitLab用户:', username);
+    console.log('API URL:', apiUrl);
+    
+    // 调用GitLab API搜索用户
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${project.accessToken}`,
+        'Accept': 'application/json'
+      },
+      params: {
+        username: username
+      },
+      timeout: 10000,
+      validateStatus: function (status) {
+        return status < 500;
+      }
+    });
+
+    console.log('GitLab用户搜索响应状态:', response.status);
+
+    if (response.status === 200 && Array.isArray(response.data) && response.data.length > 0) {
+      const user = response.data[0]; // 取第一个匹配的用户
+      
+      res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name, // 这是显示名称/昵称
+          email: user.email,
+          avatar_url: user.avatar_url,
+          web_url: user.web_url
+        }
+      });
+    } else if (response.status === 401) {
+      return res.status(401).json({ 
+        message: 'GitLab访问令牌无效或已过期'
+      });
+    } else if (response.status === 403) {
+      return res.status(403).json({ 
+        message: 'GitLab访问被禁止，请检查令牌权限'
+      });
+    } else {
+      // 用户不存在，返回默认信息
+      res.json({
+        user: {
+          username: username,
+          name: username, // 找不到用户时使用用户名作为显示名称
+          email: null,
+          avatar_url: null,
+          web_url: null
+        }
+      });
+    }
+
+  } catch (error: any) {
+    console.error('获取GitLab用户信息失败:', error);
+    
+    // 如果出错，返回默认用户信息
+    res.json({
+      user: {
+        username: req.params.username,
+        name: req.params.username,
+        email: null,
+        avatar_url: null,
+        web_url: null
+      }
+    });
+  }
+});
+
 export default router; 

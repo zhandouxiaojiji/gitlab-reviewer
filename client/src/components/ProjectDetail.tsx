@@ -54,6 +54,7 @@ const ProjectDetail: React.FC = () => {
   const [commits, setCommits] = useState<CommitReview[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userNicknames, setUserNicknames] = useState<{ [username: string]: string }>({});
 
   useEffect(() => {
     if (!username) {
@@ -121,27 +122,26 @@ const ProjectDetail: React.FC = () => {
         return;
       }
 
-      // 转换数据格式以匹配表格显示
+      // 格式化提交数据
       const formattedCommits = commits.map((commit: any, index: number) => ({
-        key: commit.id || commit.short_id || index,
-        id: String(index + 1),
-        commitId: commit.short_id || commit.id?.substring(0, 8) || '未知',
-        fullCommitId: commit.id || commit.short_id || '',
-        commitMessage: commit.message || commit.title || '无提交信息',
-        author: commit.author_name || commit.author?.name || '未知作者',
-        date: commit.committed_date || commit.created_at || new Date().toISOString(),
-        hasReview: commit.has_comments || commit.comments_count > 0 || false,
-        reviewer: commit.comments && commit.comments.length > 0 
-          ? commit.comments[0].author?.name || commit.comments[0].author_name || '有评论'
-          : (commit.has_comments ? '有评论' : ''),
-        reviewComments: commit.comments_count || (commit.comments ? commit.comments.length : 0),
-        gitlabUrl: commit.web_url
+        key: commit.id || index,
+        id: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
+        commitId: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
+        fullCommitId: commit.id || '',
+        commitMessage: commit.message || '无提交信息',
+        author: commit.author_name || '未知作者',
+        date: commit.committed_date || new Date().toISOString(),
+        hasReview: commit.has_comments || false,
+        reviewer: commit.has_comments ? '系统检测' : '',
+        reviewComments: commit.comments_count || 0
       }));
 
-      console.log('格式化后的提交数据:', formattedCommits.slice(0, 2));
       setCommits(formattedCommits);
-      setError('');
-      message.success(`成功获取 ${formattedCommits.length} 条提交记录`);
+      
+      // 加载用户昵称
+      await loadUserNicknames(commits);
+      
+      message.success(`成功加载 ${formattedCommits.length} 条提交记录`);
 
     } catch (error) {
       console.error('获取提交记录失败:', error);
@@ -228,6 +228,52 @@ const ProjectDetail: React.FC = () => {
     message.success('提交ID已复制到剪贴板');
   };
 
+  // 获取GitLab用户昵称
+  const getUserNickname = async (authorName: string): Promise<string> => {
+    // 如果已经缓存了昵称，直接返回
+    if (userNicknames[authorName]) {
+      return userNicknames[authorName];
+    }
+
+    try {
+      const response = await api.get(`/api/gitlab/projects/${projectId}/users/${encodeURIComponent(authorName)}`);
+      if (response.data.user) {
+        const nickname = response.data.user.name || authorName;
+        // 更新缓存
+        setUserNicknames(prev => ({
+          ...prev,
+          [authorName]: nickname
+        }));
+        return nickname;
+      }
+    } catch (error) {
+      console.warn(`获取用户 ${authorName} 的昵称失败:`, error);
+    }
+    
+    // 如果获取失败，使用用户名
+    return authorName;
+  };
+
+  // 批量获取所有用户的昵称
+  const loadUserNicknames = async (commits: any[]) => {
+    const uniqueAuthors = Array.from(new Set(commits.map(commit => commit.author_name)));
+    const nicknamePromises = uniqueAuthors.map(async (authorName) => {
+      if (!userNicknames[authorName]) {
+        const nickname = await getUserNickname(authorName);
+        return { authorName, nickname };
+      }
+      return { authorName, nickname: userNicknames[authorName] };
+    });
+
+    const results = await Promise.all(nicknamePromises);
+    const newNicknames: { [key: string]: string } = {};
+    results.forEach(({ authorName, nickname }) => {
+      newNicknames[authorName] = nickname;
+    });
+
+    setUserNicknames(prev => ({ ...prev, ...newNicknames }));
+  };
+
   // 删除原来的 columns 定义，替换为列表渲染函数
   const renderCommitItem = (commit: CommitReview) => (
     <div
@@ -299,7 +345,7 @@ const ProjectDetail: React.FC = () => {
         }}>
           <Text type="secondary">
             <UserOutlined style={{ marginRight: '4px' }} />
-            {commit.author}
+            {userNicknames[commit.author] || commit.author}
           </Text>
           <Text type="secondary">
             <ClockCircleOutlined style={{ marginRight: '4px' }} />
