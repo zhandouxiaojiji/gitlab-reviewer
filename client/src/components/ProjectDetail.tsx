@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Space, message, Typography } from 'antd';
+import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider } from 'antd';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   GitlabOutlined,
@@ -7,7 +7,13 @@ import {
   CommentOutlined,
   CalendarOutlined,
   UserOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CopyOutlined,
+  CodeOutlined,
+  MessageOutlined,
+  LinkOutlined
 } from '@ant-design/icons';
 import api from '../services/api';
 import MainLayout from './MainLayout';
@@ -195,130 +201,175 @@ const ProjectDetail: React.FC = () => {
     message.success('已加载演示数据，展示功能界面');
   };
 
-  const columns = [
-    {
-      title: '提交ID',
-      dataIndex: 'commitId',
-      key: 'commitId',
-      width: 100,
-      align: 'center' as const,
-      render: (text: string) => (
-        <Text code style={{ fontSize: '12px' }}>{text.substring(0, 8)}</Text>
-      ),
-    },
-    {
-      title: '提交信息',
-      dataIndex: 'commitMessage',
-      key: 'commitMessage',
-      ellipsis: true,
-      width: 300,
-    },
-    {
-      title: '作者',
-      dataIndex: 'author',
-      key: 'author',
-      width: 120,
-      align: 'center' as const,
-      render: (text: string) => (
-        <Space>
-          <UserOutlined />
-          <span>{text}</span>
-        </Space>
-      ),
-    },
-    {
-      title: '时间',
-      dataIndex: 'date',
-      key: 'date',
-      width: 180,
-      align: 'center' as const,
-      render: (text: string) => {
-        // 格式化时间为 YYYY-MM-DD HH:mm:ss 格式
-        const formatDate = (dateString: string) => {
-          try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) {
-              return dateString; // 如果无法解析，返回原始字符串
-            }
-            
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            
-            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-          } catch (error) {
-            return dateString;
-          }
-        };
+  // 格式化时间函数
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return dateString;
+      }
+      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    } catch (error) {
+      return dateString;
+    }
+  };
 
-        return (
-          <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-            <CalendarOutlined style={{ color: '#1890ff' }} />
-            <Text style={{ fontSize: '12px', lineHeight: '1.2' }}>
-              {formatDate(text)}
+  // 复制提交ID
+  const copyCommitId = (commitId: string) => {
+    navigator.clipboard.writeText(commitId);
+    message.success('提交ID已复制到剪贴板');
+  };
+
+  // 删除原来的 columns 定义，替换为列表渲染函数
+  const renderCommitItem = (commit: CommitReview) => (
+    <div
+      className="commit-item"
+      style={{
+        padding: '16px',
+        margin: '8px 0',
+        backgroundColor: '#fff',
+        border: '1px solid #f0f0f0',
+        borderRadius: '8px',
+        transition: 'all 0.3s',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px'
+      }}
+    >
+      {/* 左侧图标 */}
+      <Avatar
+        icon={<CodeOutlined />}
+        style={{
+          backgroundColor: '#f6ffed',
+          color: '#52c41a',
+          border: '1px solid #d9f7be',
+          flexShrink: 0
+        }}
+      />
+
+      {/* 主要内容区域 */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* 顶部：提交信息和状态 */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              strong
+              style={{
+                fontSize: '15px',
+                color: '#262626',
+                display: 'block',
+                lineHeight: '20px',
+                marginBottom: '4px'
+              }}
+            >
+              {commit.commitMessage}
             </Text>
-          </Space>
-        );
-      },
-    },
-    {
-      title: '审查状态',
-      dataIndex: 'hasReview',
-      key: 'hasReview',
-      width: 120,
-      align: 'center' as const,
-      render: (hasReview: boolean, record: CommitReview) => (
-        <Space direction="vertical" size="small" style={{ width: '100%', textAlign: 'center' }}>
-          <Tag color={hasReview ? 'green' : 'red'} style={{ margin: 0 }}>
-            {hasReview ? '已审查' : '待审查'}
-          </Tag>
-          {hasReview && record.reviewer && (
-            <Text type="secondary" style={{ fontSize: '11px', lineHeight: '1.2' }}>
-              审查者: {record.reviewer}
+          </div>
+          
+          {/* 右侧状态 */}
+          <div style={{ marginLeft: '16px', flexShrink: 0 }}>
+            {commit.hasReview ? (
+              <Tag icon={<CheckCircleOutlined />} color="success">
+                已审核
+              </Tag>
+            ) : (
+              <Tag icon={<ClockCircleOutlined />} color="warning">
+                待审核
+              </Tag>
+            )}
+          </div>
+        </div>
+
+        {/* 中间：作者和时间信息 */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '16px', 
+          marginBottom: '12px',
+          fontSize: '13px',
+          color: '#8c8c8c'
+        }}>
+          <Text type="secondary">
+            <UserOutlined style={{ marginRight: '4px' }} />
+            {commit.author}
+          </Text>
+          <Text type="secondary">
+            <ClockCircleOutlined style={{ marginRight: '4px' }} />
+            {formatDate(commit.date)}
+          </Text>
+          {commit.hasReview && commit.reviewer && (
+            <Text type="secondary">
+              <CheckCircleOutlined style={{ marginRight: '4px' }} />
+              审核人: {commit.reviewer}
             </Text>
           )}
-        </Space>
-      ),
-    },
-    {
-      title: '评论数',
-      dataIndex: 'reviewComments',
-      key: 'reviewComments',
-      width: 80,
-      align: 'center' as const,
-      render: (count: number) => (
-        <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-          <CommentOutlined style={{ color: '#1890ff' }} />
-          <Text style={{ fontSize: '12px', fontWeight: 'bold' }}>{count}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 80,
-      align: 'center' as const,
-      render: (_: any, record: CommitReview) => (
-        <Button 
-          size="small" 
-          icon={<EyeOutlined />}
-          onClick={() => {
-            // 打开GitLab查看提交详情，使用完整的commit ID
-            if (project) {
-              // 构建正确的GitLab提交URL：GitLab地址 + 项目名称 + commit路径
-              const gitlabCommitUrl = `${project.gitlabUrl}/${project.name}/-/commit/${record.fullCommitId}`;
-              window.open(gitlabCommitUrl, '_blank');
-            }
-          }}
-        >
-          查看
-        </Button>
-      ),
-    },
-  ];
+        </div>
+
+        {/* 底部：提交ID和操作按钮 */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          paddingTop: '8px',
+          borderTop: '1px solid #f5f5f5'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Text
+              code
+              style={{
+                fontSize: '12px',
+                color: '#1890ff',
+                backgroundColor: '#f0f5ff',
+                padding: '2px 6px',
+                borderRadius: '4px'
+              }}
+            >
+              {commit.commitId}
+            </Text>
+            <Button
+              type="link"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => copyCommitId(commit.fullCommitId)}
+              style={{ padding: '0', height: 'auto' }}
+            >
+              复制
+            </Button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {commit.hasReview && (
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                <MessageOutlined style={{ marginRight: '2px' }} />
+                {commit.reviewComments} 条评论
+              </Text>
+            )}
+            <Button
+              type="primary"
+              size="small"
+              icon={<LinkOutlined />}
+              onClick={() => {
+                if (project) {
+                  const gitlabCommitUrl = `${project.gitlabUrl}/${project.name}/-/commit/${commit.fullCommitId}`;
+                  window.open(gitlabCommitUrl, '_blank');
+                }
+              }}
+            >
+              查看
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   if (!project) {
     return <MainLayout><div>加载中...</div></MainLayout>;
@@ -330,6 +381,18 @@ const ProjectDetail: React.FC = () => {
 
   return (
     <MainLayout>
+      <style>
+        {`
+          .commit-item:hover {
+            border-color: #1890ff !important;
+            box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2) !important;
+          }
+          .ant-list-item {
+            border: none !important;
+            padding: 0 !important;
+          }
+        `}
+      </style>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         {/* 项目信息卡片 */}
         <Card>
@@ -393,22 +456,25 @@ const ProjectDetail: React.FC = () => {
               )}
             </div>
           )}
-          <Table
-            columns={columns}
+          <List
             dataSource={commits}
-            rowKey="id"
+            renderItem={renderCommitItem}
             loading={loading}
-            size="middle"
-            scroll={{ x: 'max-content' }}
+            size="large"
+            locale={{
+              emptyText: '暂无提交记录'
+            }}
             pagination={{
               pageSize: 10,
               showQuickJumper: true,
               showSizeChanger: true,
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
+              showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
               pageSizeOptions: ['10', '20', '50'],
             }}
-            locale={{
-              emptyText: '暂无提交记录'
+            style={{
+              backgroundColor: '#fafafa',
+              padding: '16px',
+              borderRadius: '8px'
             }}
           />
         </Card>
