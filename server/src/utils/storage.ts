@@ -14,6 +14,23 @@ const generateId = () => {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 };
 
+// 生成项目ID（基于GitLab URL + 项目名称）
+const generateProjectId = (gitlabUrl: string, projectName: string) => {
+  // 清理GitLab URL，移除协议和末尾斜杠
+  const cleanUrl = gitlabUrl
+    .replace(/^https?:\/\//, '') // 移除协议
+    .replace(/\/$/, '') // 移除末尾斜杠
+    .replace(/[^a-zA-Z0-9.-]/g, '_'); // 将特殊字符替换为下划线
+  
+  // 清理项目名称，将特殊字符替换为下划线
+  const cleanProject = projectName
+    .replace(/[^a-zA-Z0-9.-_]/g, '_')
+    .replace(/\/+/g, '_'); // 将斜杠替换为下划线
+  
+  // 生成项目ID：url_projectname
+  return `${cleanUrl}_${cleanProject}`;
+};
+
 // 数据存储路径
 const DATA_DIR = path.join(process.cwd(), 'data');
 const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
@@ -62,7 +79,7 @@ export const projectStorage = {
   create: (projectData: any) => {
     const projects = readJSONFile(PROJECTS_FILE);
     const project = {
-      id: generateId(),
+      id: generateProjectId(projectData.gitlabUrl, projectData.name),
       ...projectData,
       userMappings: {},
       reviewers: projectData.reviewers || [],

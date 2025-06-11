@@ -36,12 +36,26 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
     }
 
-    // 检查项目是否已存在
-    const existingProject = projectStorage.findAll().find(p => 
-      p.gitlabUrl === gitlabUrl && p.isActive !== false
-    );
-    if (existingProject) {
-      return res.status(400).json({ message: '该GitLab项目已存在' });
+    // 生成项目ID（基于GitLab URL + 项目名称）
+    const generateProjectId = (gitlabUrl: string, projectName: string) => {
+      const cleanUrl = gitlabUrl
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '')
+        .replace(/[^a-zA-Z0-9.-]/g, '_');
+      
+      const cleanProject = projectName
+        .replace(/[^a-zA-Z0-9.-_]/g, '_')
+        .replace(/\/+/g, '_');
+      
+      return `${cleanUrl}_${cleanProject}`;
+    };
+
+    const projectId = generateProjectId(gitlabUrl, name);
+
+    // 检查项目是否已存在（通过生成的ID检查）
+    const existingProject = projectStorage.findById(projectId);
+    if (existingProject && existingProject.isActive !== false) {
+      return res.status(400).json({ message: '该GitLab项目已存在（相同的GitLab地址和项目名称）' });
     }
 
     const project = projectStorage.create({
@@ -89,40 +103,87 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
     }
 
-    // 检查是否有其他项目使用相同的GitLab URL
-    const duplicateProject = projectStorage.findAll().find(p => 
-      p.gitlabUrl === gitlabUrl && p.id !== projectId && p.isActive !== false
-    );
-    if (duplicateProject) {
-      return res.status(400).json({ message: '该GitLab项目已被其他配置使用' });
-    }
+    // 生成新的项目ID
+    const generateProjectId = (gitlabUrl: string, projectName: string) => {
+      const cleanUrl = gitlabUrl
+        .replace(/^https?:\/\//, '')
+        .replace(/\/$/, '')
+        .replace(/[^a-zA-Z0-9.-]/g, '_');
+      
+      const cleanProject = projectName
+        .replace(/[^a-zA-Z0-9.-_]/g, '_')
+        .replace(/\/+/g, '_');
+      
+      return `${cleanUrl}_${cleanProject}`;
+    };
 
-    const updatedProject = projectStorage.update(projectId, {
-      name,
-      gitlabUrl,
-      accessToken,
-      description,
-      reviewers: reviewers || [],
-      reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
-      maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
-      updatedAt: new Date().toISOString()
-    });
+    const newProjectId = generateProjectId(gitlabUrl, name);
 
-    // 如果GitLab配置有变化，重新获取用户映射关系
-    if (existingProject.gitlabUrl !== gitlabUrl || 
-        existingProject.accessToken !== accessToken || 
-        existingProject.name !== name) {
+    // 如果GitLab URL或项目名称发生变化，ID会改变
+    if (newProjectId !== projectId) {
+      // 检查新ID是否已存在
+      const duplicateProject = projectStorage.findById(newProjectId);
+      if (duplicateProject && duplicateProject.isActive !== false) {
+        return res.status(400).json({ message: '该GitLab项目已被其他配置使用（相同的GitLab地址和项目名称）' });
+      }
+
+      // 创建新项目（保留原有配置）
+      const newProject = projectStorage.create({
+        name,
+        gitlabUrl,
+        accessToken,
+        description,
+        reviewers: reviewers || existingProject.reviewers || [],
+        reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
+        maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
+        userMappings: existingProject.userMappings || {},
+        isActive: true,
+        createdBy: existingProject.createdBy,
+        createdAt: existingProject.createdAt
+      });
+
+      // 删除旧项目
+      projectStorage.update(projectId, { isActive: false, deletedAt: new Date().toISOString() });
+
+      // 重新获取用户映射关系
       setTimeout(async () => {
         try {
-          console.log(`项目配置已更新，重新获取用户映射关系: ${updatedProject.name}`);
-          await GitlabUserService.updateProjectUserMappings(projectId);
+          console.log(`项目ID已更新，重新获取用户映射关系: ${newProject.name}`);
+          await GitlabUserService.updateProjectUserMappings(newProject.id);
         } catch (error) {
-          console.error(`为项目 ${updatedProject.name} 重新获取用户映射关系失败:`, error);
+          console.error(`为项目 ${newProject.name} 重新获取用户映射关系失败:`, error);
         }
       }, 100);
-    }
 
-    res.json(updatedProject);
+      res.json(newProject);
+    } else {
+      // ID没有变化，正常更新
+      const updatedProject = projectStorage.update(projectId, {
+        name,
+        gitlabUrl,
+        accessToken,
+        description,
+        reviewers: reviewers || [],
+        reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
+        maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
+        updatedAt: new Date().toISOString()
+      });
+
+      // 如果GitLab配置有变化，重新获取用户映射关系
+      if (existingProject.gitlabUrl !== gitlabUrl || 
+          existingProject.accessToken !== accessToken) {
+        setTimeout(async () => {
+          try {
+            console.log(`项目配置已更新，重新获取用户映射关系: ${updatedProject.name}`);
+            await GitlabUserService.updateProjectUserMappings(projectId);
+          } catch (error) {
+            console.error(`为项目 ${updatedProject.name} 重新获取用户映射关系失败:`, error);
+          }
+        }, 100);
+      }
+
+      res.json(updatedProject);
+    }
   } catch (error) {
     console.error('更新项目错误:', error);
     res.status(500).json({ message: '服务器内部错误' });
