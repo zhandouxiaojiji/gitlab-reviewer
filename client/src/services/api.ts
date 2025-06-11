@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+// 动态获取API基础地址
+const getApiBaseUrl = () => {
+  // 如果设置了环境变量，优先使用
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // 生产环境下，使用相对路径（nginx代理）
+  if (process.env.NODE_ENV === 'production') {
+    return '';  // 使用相对路径，通过nginx代理到后端
+  }
+  
+  // 开发环境下，使用localhost
+  return 'http://localhost:3001';
+};
+
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001',
+  baseURL: getApiBaseUrl(),
   timeout: 10000,
 });
 
@@ -34,5 +50,8 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// 导出API基础地址获取函数，供其他地方使用
+export const getApiUrl = () => getApiBaseUrl();
 
 export default api; 

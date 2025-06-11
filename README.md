@@ -36,7 +36,20 @@
 
 ## Docker 一键部署
 
-### 方式一：使用 Docker Hub 镜像（推荐）
+### 方式一：使用快速部署脚本（推荐）
+
+```bash
+# 下载并运行快速部署脚本
+curl -sSL https://raw.githubusercontent.com/your-username/gitlab-reviewer/main/quick-deploy.sh | bash
+
+# 或者下载仓库后运行
+git clone https://github.com/your-username/gitlab-reviewer.git
+cd gitlab-reviewer
+chmod +x quick-deploy.sh
+./quick-deploy.sh
+```
+
+### 方式二：使用 Docker Hub 镜像
 
 ```bash
 # 拉取最新镜像
@@ -54,7 +67,7 @@ docker run -d \
 open http://localhost:8080
 ```
 
-### 方式二：使用 Docker Compose
+### 方式三：使用 Docker Compose
 
 ```bash
 # 克隆仓库
@@ -71,7 +84,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-### 方式三：本地构建
+### 方式四：本地构建
 
 ```bash
 # 克隆仓库
@@ -177,16 +190,33 @@ npm run build
 
 ### 常见问题
 
-1. **GitLab连接失败**
+1. **前端无法连接后端API（服务器部署）**
+   - **问题**：在服务器上部署后，前端仍然尝试连接localhost:3001
+   - **解决方案**：
+     ```bash
+     # 方案1: 使用nginx代理（推荐，默认配置）
+     # 系统会自动通过nginx将/api请求代理到后端
+     
+     # 方案2: 如果需要直连后端，设置环境变量
+     docker run -d \
+       --name gitlab-reviewer \
+       -p 8080:80 \
+       -p 3001:3001 \
+       -e REACT_APP_API_URL=http://YOUR_SERVER_IP:3001 \
+       -v $(pwd)/data:/app/server/data \
+       zhandouxiaojiji/gitlab-reviewer:latest
+     ```
+
+2. **GitLab连接失败**
    - 检查GitLab URL是否正确
    - 确认Access Token权限充足
    - 验证网络连接
 
-2. **用户映射显示异常**
+3. **用户映射显示异常**
    - 在设置页面点击"刷新用户"按钮
    - 确认Token有用户读取权限
 
-3. **提交记录不显示**
+4. **提交记录不显示**
    - 检查审核时间范围设置
    - 确认拉取记录上限配置
    - 查看控制台错误日志

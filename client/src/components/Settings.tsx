@@ -24,7 +24,7 @@ import {
   UserOutlined
 } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { getApiUrl } from '../services/api';
 import MainLayout from './MainLayout';
 
 const { Title, Text } = Typography;
@@ -156,22 +156,10 @@ const Settings: React.FC = () => {
   const handleRefreshProjectUserMappings = async (project: GitLabProject) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       
-      const response = await fetch(`http://localhost:3001/api/projects/${project.id}/refresh-users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('刷新用户映射关系失败');
-      }
-
-      const data = await response.json();
-      message.success(`项目 "${project.name}" 用户映射关系刷新成功，共更新 ${data.userCount} 个用户`);
+      const response = await api.post(`/api/projects/${project.id}/refresh-users`);
+      
+      message.success(`项目 "${project.name}" 用户映射关系刷新成功，共更新 ${response.data.userCount} 个用户`);
     } catch (error) {
       console.error('刷新用户映射关系失败:', error);
       message.error(`刷新项目 "${project.name}" 用户映射关系失败`);

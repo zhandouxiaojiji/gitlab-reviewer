@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider } from 'antd';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider, Row, Col, Statistic, Spin, Empty } from 'antd';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { 
   GitlabOutlined,
   EyeOutlined,
@@ -13,12 +13,13 @@ import {
   CopyOutlined,
   CodeOutlined,
   MessageOutlined,
-  LinkOutlined
+  LinkOutlined,
+  ArrowLeftOutlined
 } from '@ant-design/icons';
-import api from '../services/api';
+import api, { getApiUrl } from '../services/api';
 import MainLayout from './MainLayout';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 interface GitLabProject {
   id: string;
@@ -88,7 +89,11 @@ const ProjectDetail: React.FC = () => {
       const foundProject = projectsData.find((p: GitLabProject) => p.name === decodeURIComponent(projectName!));
       if (foundProject) {
         setProject(foundProject);
-        loadCommitReviews(foundProject.id);
+        // 设置用户映射关系
+        if (foundProject.userMappings) {
+          setUserNicknames(foundProject.userMappings);
+        }
+        // 项目设置后，loadCommits会通过useCallback自动执行
       } else {
         message.error('未找到指定项目');
         navigate(`/dashboard?user=${username}`);
@@ -99,109 +104,59 @@ const ProjectDetail: React.FC = () => {
     }
   };
 
-  const loadCommitReviews = async (projectId: string) => {
-    if (loading) return; // 防止重复加载
+  const loadCommits = useCallback(async () => {
+    if (!project) return;
     
-    setLoading(true);
     try {
-      if (!projectId) {
-        throw new Error('项目ID不存在');
-      }
-
-      const token = localStorage.getItem('token');
-
-      const response = await fetch(`http://localhost:3001/api/gitlab/projects/${projectId}/commits`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('GitLab访问令牌无效或已过期');
-        } else if (response.status === 404) {
-          throw new Error('GitLab项目不存在或无法访问');
-        } else {
-          const errorText = await response.text();
-          throw new Error(`API调用失败 (${response.status}): ${errorText.substring(0, 100)}`);
-        }
-      }
-
-      const data = await response.json();
-
-      // 处理提交数据
-      const commits = data.commits || [];
+      setLoading(true);
       
-      // 直接从后端获取用户映射关系
-      const backendUserMappings = data.userMappings || {};
-      setUserNicknames(backendUserMappings);
+      const response = await api.get(`/api/gitlab/projects/${project.id}/commits`);
       
-      if (commits.length === 0) {
-        setError('该项目暂无提交记录');
-        setCommits([]);
-        return;
+      // 后端返回的数据结构是 { commits: [], userMappings: {}, ... }
+      const responseData = response.data || {};
+      const commitsData = Array.isArray(responseData.commits) ? responseData.commits : [];
+      
+      // 更新用户映射关系
+      if (responseData.userMappings) {
+        setUserNicknames(responseData.userMappings);
       }
-
-      // 格式化提交数据
-      const formattedCommits = commits.map((commit: any, index: number) => {
-        // 获取所有评论作者
-        let allReviewers: string[] = [];
-        
-        if (commit.has_comments && commit.comments && commit.comments.length > 0) {
-          console.log(`提交 ${commit.short_id || commit.id?.substring(0, 8)} 的评论数据:`, commit.comments);
-          
-          // 获取所有评论作者，尝试多种方式获取用户名
-          const commentAuthors = commit.comments.map((comment: any) => {
-            const author = comment.author?.username || 
-                          comment.author?.name || 
-                          comment.author?.login ||
-                          comment.username ||
-                          comment.author ||
-                          '';
-            console.log('评论作者信息:', comment.author, '提取的作者:', author);
-            return author;
-          }).filter((author: string) => author !== '' && author !== commit.author_name); // 排除提交人自己的评论
-          
-          console.log('提取的评论作者列表:', commentAuthors);
-          console.log('提交人:', commit.author_name);
-          
-          // 去重
-          allReviewers = Array.from(new Set(commentAuthors));
-          
-          console.log('去重后的审核人员:', allReviewers);
-        } else {
-          console.log(`提交 ${commit.short_id || commit.id?.substring(0, 8)} 没有评论或评论数据为空`);
-        }
-        
-        return {
-          key: commit.id || index,
-          id: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
-          commitId: commit.short_id || commit.id?.substring(0, 8) || `commit-${index}`,
-          fullCommitId: commit.id || '',
-          commitMessage: commit.message || '无提交信息',
-          author: commit.author_name || '未知作者',
-          date: commit.committed_date || new Date().toISOString(),
-          hasReview: commit.has_comments || false,
-          reviewer: allReviewers.length > 0 ? allReviewers[0] : '', // 保留第一个作为主要审核人（用于兼容）
-          allReviewers: allReviewers, // 所有参与评论的审核人员
-          reviewComments: commit.comments_count || 0
-        };
-      });
-
-      console.log(`获取到 ${formattedCommits.length} 条提交记录（已根据项目审核范围 ${project?.reviewDays || 7} 天在后端过滤）`);
-
+      
+      // 将后端格式转换为前端期望的格式
+      const formattedCommits = commitsData.map((commit: any) => ({
+        id: commit.id,
+        commitId: commit.short_id,
+        fullCommitId: commit.id,
+        commitMessage: commit.message,
+        author: commit.author_name,
+        date: commit.committed_date,
+        hasReview: commit.has_comments,
+        reviewer: commit.comments?.[0]?.author?.name || '',
+        allReviewers: commit.comments?.map((comment: any) => comment.author?.name || comment.author?.username || '').filter(Boolean) || [],
+        reviewComments: commit.comments_count || 0,
+        gitlabUrl: commit.web_url,
+        key: commit.id
+      }));
+      
       setCommits(formattedCommits);
+      console.log(`获取到 ${formattedCommits.length} 条提交记录（已根据项目审核范围 ${project?.reviewDays || 7} 天在后端过滤）`);
       
+      // 清除错误状态
+      setError(null);
     } catch (error) {
       console.error('获取提交记录失败:', error);
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
-      setError(`获取提交记录失败: ${errorMessage}`);
+      setError('获取提交记录失败，请检查GitLab连接或后端服务状态');
+      message.error('获取提交记录失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [project]);
+
+  // 当project变化时自动加载commits
+  useEffect(() => {
+    if (project) {
+      loadCommits();
+    }
+  }, [project, loadCommits]);
 
   // 加载演示数据的函数
   const loadDemoData = () => {
@@ -535,6 +490,31 @@ const ProjectDetail: React.FC = () => {
 
   const { reviewedCount, totalCount, reviewRate } = calculateReviewStats();
 
+  const refreshUserMappings = async () => {
+    if (!project?.id) {
+      message.error('项目ID不存在，无法刷新用户映射关系');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const response = await api.post(`/api/projects/${project.id}/refresh-users`);
+      
+      // 更新本地状态
+      if (response.data.userMappings) {
+        setUserNicknames(response.data.userMappings);
+      }
+      
+      message.success(`用户映射关系刷新成功，共更新 ${response.data.userCount} 个用户`);
+    } catch (error) {
+      console.error('刷新用户映射关系失败:', error);
+      message.error('刷新用户映射关系失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <MainLayout>
       <style>
@@ -614,7 +594,7 @@ const ProjectDetail: React.FC = () => {
             <Button 
               type="primary" 
               icon={<ReloadOutlined />} 
-              onClick={() => loadCommitReviews(project?.id || '')}
+              onClick={() => loadCommits()}
               loading={loading}
             >
               刷新数据

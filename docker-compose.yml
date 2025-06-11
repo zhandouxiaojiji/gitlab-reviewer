@@ -12,6 +12,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      # 可选：如果需要自定义API地址，取消注释下一行
+      # - REACT_APP_API_URL=http://your-server-ip:3001
     restart: unless-stopped
     container_name: gitlab-reviewer
     
