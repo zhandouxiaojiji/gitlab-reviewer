@@ -91,73 +91,32 @@ const ProjectDetail: React.FC = () => {
       });
 
       console.log('API响应状态:', response.status);
-      console.log('API响应头:', response.headers.get('content-type'));
 
-      // 检查响应状态
-      if (response.status === 404) {
-        setError('项目不存在或无法访问');
-        setCommits([]);
-        return;
-      } else if (response.status === 401) {
-        setError('认证失败，请重新登录');
-        setCommits([]);
-        return;
-      } else if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API错误响应:', errorText);
-        setError(`服务器错误 (${response.status})`);
-        setCommits([]);
-        return;
-      }
-
-      // 检查响应内容类型
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const htmlContent = await response.text();
-        console.error('API返回了非JSON内容:', htmlContent.substring(0, 200));
-        
-        if (htmlContent.includes('<!DOCTYPE')) {
-          setError('API路由不存在，请检查后端服务是否正确启动');
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('GitLab访问令牌无效或已过期');
+        } else if (response.status === 404) {
+          throw new Error('GitLab项目不存在或无法访问');
         } else {
-          setError('服务器返回了错误的数据格式');
+          const errorText = await response.text();
+          throw new Error(`API调用失败 (${response.status}): ${errorText.substring(0, 100)}`);
         }
-        setCommits([]);
-        return;
       }
 
       const data = await response.json();
       console.log('API返回数据:', data);
 
-      // 检查数据结构
-      if (!data || typeof data !== 'object') {
-        setError('服务器返回的数据格式错误');
-        setCommits([]);
-        return;
-      }
-
       // 处理提交数据
-      let commitsData = [];
-      if (Array.isArray(data)) {
-        // 如果直接返回数组
-        commitsData = data;
-      } else if (data.commits && Array.isArray(data.commits)) {
-        // 如果是包装在commits字段中的数组
-        commitsData = data.commits;
-      } else {
-        console.warn('未找到commits数据，数据结构:', Object.keys(data));
-        setError('未找到提交记录数据');
-        setCommits([]);
-        return;
-      }
-
-      if (commitsData.length === 0) {
+      const commits = data.commits || [];
+      
+      if (commits.length === 0) {
         setError('该项目暂无提交记录');
         setCommits([]);
         return;
       }
 
       // 转换数据格式以匹配表格显示
-      const formattedCommits = commitsData.map((commit: any, index: number) => ({
+      const formattedCommits = commits.map((commit: any, index: number) => ({
         key: commit.id || commit.short_id || index,
         id: String(index + 1),
         commitId: commit.short_id || commit.id?.substring(0, 8) || '未知',
@@ -175,26 +134,13 @@ const ProjectDetail: React.FC = () => {
 
       console.log('格式化后的提交数据:', formattedCommits.slice(0, 2));
       setCommits(formattedCommits);
-      
-      if (formattedCommits.length > 0) {
-        setError('');
-        message.success(`成功获取 ${formattedCommits.length} 条提交记录`);
-      }
+      setError('');
+      message.success(`成功获取 ${formattedCommits.length} 条提交记录`);
+
     } catch (error) {
       console.error('获取提交记录失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
       setError(`获取提交记录失败: ${errorMessage}`);
-      
-      // 提供模拟数据选项
-      if (errorMessage.includes('API路由不存在') || errorMessage.includes('服务器错误')) {
-        setError(`
-          后端服务连接失败。请检查：
-          1. 后端服务是否正在运行 (端口3001)
-          2. GitLab API路由是否正确配置
-          
-          提示：您可以点击下方"加载演示数据"按钮查看功能演示
-        `);
-      }
     } finally {
       setLoading(false);
     }

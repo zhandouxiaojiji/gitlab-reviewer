@@ -13,9 +13,13 @@ interface AuthRequest extends Request {
 interface Project {
   id: string;
   name: string;
-  gitlab_url: string;
-  access_token: string;
-  gitlab_project_id?: string;
+  gitlabUrl: string;
+  accessToken: string;
+  description?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isActive?: boolean;
 }
 
 // 获取项目的提交记录
@@ -32,9 +36,39 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
       return res.status(404).json({ message: '项目不存在' });
     }
 
+    console.log('项目配置:', {
+      name: project.name,
+      gitlabUrl: project.gitlabUrl,
+      hasToken: !!project.accessToken
+    });
+
+    // 验证和标准化GitLab URL
+    let gitlabBaseUrl = project.gitlabUrl.replace(/\/$/, ''); // 移除末尾斜杠
+    
+    // 确保URL包含协议
+    if (!gitlabBaseUrl.startsWith('http://') && !gitlabBaseUrl.startsWith('https://')) {
+      gitlabBaseUrl = 'http://' + gitlabBaseUrl;
+    }
+
+    // 修复URL构建 - 不要将项目名称作为路径的一部分
+    // GitLab URL应该只包含域名，不包含项目路径
+    const urlParts = new URL(gitlabBaseUrl);
+    const cleanGitlabUrl = `${urlParts.protocol}//${urlParts.host}`;
+
     // 构建GitLab API URL
-    const gitlabUrl = project.gitlab_url.replace(/\/$/, ''); // 移除末尾斜杠
-    const apiUrl = `${gitlabUrl}/api/v4/projects/${encodeURIComponent(project.gitlab_project_id || project.name)}/repository/commits`;
+    let projectIdentifier = encodeURIComponent(project.name);
+    
+    // 如果项目名称包含斜杠，说明是group/project格式
+    if (project.name.includes('/')) {
+      projectIdentifier = encodeURIComponent(project.name);
+    }
+    
+    const apiUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits`;
+    
+    console.log('清理后的GitLab URL:', cleanGitlabUrl);
+    console.log('完整请求URL:', apiUrl);
+    console.log('项目标识符:', projectIdentifier);
+    console.log('原始项目名称:', project.name);
     
     // 构建查询参数
     const params: any = {
@@ -46,26 +80,125 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
     if (since) params.since = since;
     if (until) params.until = until;
 
+    console.log('请求参数:', params);
+
     // 调用GitLab API
     const response = await axios.get(apiUrl, {
       headers: {
-        'Authorization': `Bearer ${project.access_token}`
+        'Authorization': `Bearer ${project.accessToken}`,
+        'Accept': 'application/json'
       },
-      params
+      params,
+      timeout: 10000, // 10秒超时
+      validateStatus: function (status) {
+        return status < 500; // 不要自动抛出4xx错误
+      }
     });
 
-    const commits = response.data;
+    console.log('GitLab API响应状态:', response.status);
+    console.log('GitLab API响应头Content-Type:', response.headers['content-type']);
+
+    // 检查响应状态
+    if (response.status === 404) {
+      // 项目不存在，可能项目名称格式不对，尝试其他格式
+      console.log('项目未找到，尝试其他标识符格式...');
+      
+      // 尝试使用项目名称的不同格式
+      const alternativeIdentifiers = [
+        project.name, // 原始名称
+        project.name.replace(/\//g, '%2F'), // 手动编码斜杠
+        encodeURI(project.name), // URI编码
+      ];
+      
+      return res.status(404).json({ 
+        message: `GitLab项目 "${project.name}" 不存在或无法访问`,
+        details: `请检查项目名称是否正确。尝试的标识符: ${alternativeIdentifiers.join(', ')}`,
+        gitlabUrl: gitlabBaseUrl,
+        suggestedFormats: [
+          'group/project (如: mygroup/myproject)',
+          'project (如: myproject)',
+          '项目ID (如: 123)'
+        ]
+      });
+    } else if (response.status === 401) {
+      return res.status(401).json({ 
+        message: 'GitLab访问令牌无效或已过期',
+        details: '请检查访问令牌是否正确，以及是否有访问该项目的权限'
+      });
+    } else if (response.status === 403) {
+      return res.status(403).json({ 
+        message: 'GitLab访问被禁止',
+        details: '访问令牌没有访问该项目的权限'
+      });
+    }
+
+    // 检查响应内容类型
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      console.log('收到非JSON响应:', response.data);
+      
+      // 如果收到HTML响应，说明URL可能错误
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE')) {
+        return res.status(500).json({
+          message: 'GitLab API URL配置错误',
+          details: '请求返回了HTML页面而不是API响应，请检查GitLab URL配置是否正确',
+          receivedUrl: apiUrl,
+          suggestion: '确保GitLab URL格式正确，例如: http://your-gitlab.com 或 https://gitlab.com'
+        });
+      }
+      
+      return res.status(500).json({
+        message: 'GitLab API响应格式错误',
+        details: `期望JSON格式，但收到了 ${contentType}`,
+        responseData: response.data
+      });
+    }
+
+    console.log('GitLab API响应数据类型:', typeof response.data);
+    console.log('GitLab API响应数据长度:', Array.isArray(response.data) ? response.data.length : '不是数组');
+
+    let commits = response.data;
+
+    // 检查数据类型并处理
+    if (!Array.isArray(commits)) {
+      console.log('响应数据不是数组:', commits);
+      
+      // 如果是对象且包含commits字段
+      if (commits && typeof commits === 'object' && Array.isArray(commits.commits)) {
+        commits = commits.commits;
+      } else {
+        console.error('无法解析提交数据:', commits);
+        return res.status(500).json({ 
+          message: 'GitLab API返回的数据格式不正确',
+          receivedType: typeof commits,
+          receivedData: commits
+        });
+      }
+    }
+
+    if (commits.length === 0) {
+      return res.json({
+        commits: [],
+        total: 0,
+        total_pages: 1,
+        current_page: 1,
+        per_page: parseInt(per_page.toString()),
+        message: '该分支暂无提交记录'
+      });
+    }
 
     // 获取每个提交的评论
     const commitsWithComments = await Promise.all(
       commits.map(async (commit: any) => {
         try {
           // 获取提交的评论
-          const commentsUrl = `${gitlabUrl}/api/v4/projects/${encodeURIComponent(project.gitlab_project_id || project.name)}/repository/commits/${commit.id}/comments`;
+          const commentsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits/${commit.id}/comments`;
           const commentsResponse = await axios.get(commentsUrl, {
             headers: {
-              'Authorization': `Bearer ${project.access_token}`
-            }
+              'Authorization': `Bearer ${project.accessToken}`,
+              'Accept': 'application/json'
+            },
+            timeout: 5000
           });
           
           const comments = commentsResponse.data;
@@ -87,7 +220,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
             }))
           };
         } catch (error) {
-          console.warn(`获取提交 ${commit.id} 的评论失败:`, error);
+          console.warn(`获取提交 ${commit.id} 的评论失败:`, error instanceof Error ? error.message : error);
           return {
             id: commit.id,
             short_id: commit.short_id,
@@ -104,6 +237,8 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
       })
     );
 
+    console.log(`成功处理 ${commitsWithComments.length} 条提交记录`);
+
     res.json({
       commits: commitsWithComments,
       total: response.headers['x-total'] || commitsWithComments.length,
@@ -115,15 +250,36 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
   } catch (error: any) {
     console.error('获取提交记录失败:', error);
     
-    if (error.response?.status === 401) {
-      return res.status(401).json({ message: 'GitLab访问令牌无效或已过期' });
+    // 详细的错误信息
+    let errorMessage = '获取提交记录失败';
+    let statusCode = 500;
+    
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage = 'GitLab服务器连接被拒绝，请检查URL是否正确';
+      statusCode = 503;
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = 'GitLab服务器域名无法解析，请检查URL';
+      statusCode = 503;
+    } else if (error.code === 'ETIMEDOUT') {
+      errorMessage = 'GitLab服务器连接超时';
+      statusCode = 504;
+    } else if (error.response?.status === 401) {
+      errorMessage = 'GitLab访问令牌无效或已过期';
+      statusCode = 401;
     } else if (error.response?.status === 404) {
-      return res.status(404).json({ message: 'GitLab项目不存在或无法访问' });
+      errorMessage = 'GitLab项目不存在或无法访问';
+      statusCode = 404;
+    } else if (error.response?.status === 403) {
+      errorMessage = 'GitLab访问被禁止，请检查令牌权限';
+      statusCode = 403;
     }
     
-    res.status(500).json({ 
-      message: '获取提交记录失败', 
-      error: error.message 
+    res.status(statusCode).json({ 
+      message: errorMessage,
+      error: error.message,
+      code: error.code,
+      responseStatus: error.response?.status,
+      responseData: error.response?.data
     });
   }
 });
@@ -143,8 +299,8 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
     }
 
     // 获取提交记录（不分页，获取所有数据）
-    const gitlabUrl = project.gitlab_url.replace(/\/$/, '');
-    const apiUrl = `${gitlabUrl}/api/v4/projects/${encodeURIComponent(project.gitlab_project_id || project.name)}/repository/commits`;
+    const gitlabUrl = project.gitlabUrl.replace(/\/$/, '');
+    const apiUrl = `${gitlabUrl}/api/v4/projects/${encodeURIComponent(project.name)}/repository/commits`;
     
     const params: any = {
       ref_name: branch,
@@ -162,7 +318,7 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
     while (hasNextPage) {
       const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${project.access_token}`
+          'Authorization': `Bearer ${project.accessToken}`
         },
         params: { ...params, page }
       });
