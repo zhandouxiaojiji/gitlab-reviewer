@@ -19,8 +19,7 @@ import {
   GitlabOutlined,
   LinkOutlined,
   KeyOutlined,
-  UserOutlined,
-  ReloadOutlined
+  UserOutlined
 } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -120,51 +119,6 @@ const Settings: React.FC = () => {
     }
   };
 
-  // 刷新所有项目的用户映射关系
-  const handleRefreshAllUserMappings = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      // 为所有项目并行刷新用户映射关系
-      const refreshPromises = projects.map(async (project) => {
-        try {
-          const response = await fetch(`http://localhost:3001/api/projects/${project.id}/refresh-users`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            return { projectName: project.name, userCount: data.userCount, success: true };
-          } else {
-            return { projectName: project.name, success: false };
-          }
-        } catch (error) {
-          return { projectName: project.name, success: false };
-        }
-      });
-      
-      const results = await Promise.all(refreshPromises);
-      const successCount = results.filter(r => r.success).length;
-      const totalUserCount = results.reduce((sum, r) => sum + (r.userCount || 0), 0);
-      
-      if (successCount === projects.length) {
-        message.success(`所有项目用户映射关系刷新成功，共更新 ${totalUserCount} 个用户`);
-      } else {
-        message.warning(`${successCount}/${projects.length} 个项目刷新成功，共更新 ${totalUserCount} 个用户`);
-      }
-    } catch (error) {
-      console.error('刷新用户映射关系失败:', error);
-      message.error('刷新用户映射关系失败，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 刷新单个项目的用户映射关系
   const handleRefreshProjectUserMappings = async (project: GitLabProject) => {
     try {
@@ -188,34 +142,6 @@ const Settings: React.FC = () => {
     } catch (error) {
       console.error('刷新用户映射关系失败:', error);
       message.error(`刷新项目 "${project.name}" 用户映射关系失败`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 清理重复用户映射关系
-  const handleCleanupDuplicateMappings = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch('http://localhost:3001/api/projects/cleanup-duplicate-mappings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('清理重复映射关系失败');
-      }
-
-      const data = await response.json();
-      message.success(data.details || '重复用户映射关系清理完成');
-    } catch (error) {
-      console.error('清理重复映射关系失败:', error);
-      message.error('清理重复映射关系失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -317,23 +243,13 @@ const Settings: React.FC = () => {
             marginBottom: '16px'
           }}>
             <Title level={4} style={{ margin: 0 }}>GitLab项目配置</Title>
-            <Space>
-              <Button 
-                icon={<ReloadOutlined />}
-                onClick={handleRefreshAllUserMappings}
-                loading={loading}
-                disabled={projects.length === 0}
-              >
-                刷新所有项目用户昵称
-              </Button>
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />} 
-                onClick={handleAddProject}
-              >
-                添加项目
-              </Button>
-            </Space>
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />} 
+              onClick={handleAddProject}
+            >
+              添加项目
+            </Button>
           </div>
           
           <Table
@@ -345,32 +261,6 @@ const Settings: React.FC = () => {
               emptyText: '暂无项目配置，请添加项目'
             }}
           />
-        </Card>
-
-        <Card>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'flex-start',
-            marginBottom: '16px'
-          }}>
-            <Title level={4} style={{ margin: 0 }}>用户昵称映射说明</Title>
-            <Button 
-              type="default"
-              size="small"
-              onClick={handleCleanupDuplicateMappings}
-              loading={loading}
-            >
-              清理重复映射
-            </Button>
-          </div>
-          <div style={{ color: '#8c8c8c', lineHeight: '1.6' }}>
-            <p>• 系统会自动获取GitLab项目中的用户信息，建立用户名到昵称的映射关系</p>
-            <p>• 在提交记录和审查信息中会显示用户的中文昵称而不是英文用户名</p>
-            <p>• 可以手动刷新单个项目或所有项目的用户映射关系</p>
-            <p>• 用户映射关系会在项目创建和更新时自动刷新</p>
-            <p>• 如果出现重复映射（昵称映射到自身），可以使用"清理重复映射"功能</p>
-          </div>
         </Card>
       </Space>
 

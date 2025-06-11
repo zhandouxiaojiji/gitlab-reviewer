@@ -163,8 +163,6 @@ const ProjectDetail: React.FC = () => {
 
       setCommits(formattedCommits);
       
-      message.success(`成功加载 ${formattedCommits.length} 条提交记录`);
-
     } catch (error) {
       console.error('获取提交记录失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
