@@ -1,10 +1,10 @@
-import express from 'express';
-import { Request, Response } from 'express';
+import express, { Router, Response } from 'express';
+import { Request } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { storage } from '../utils/storage';
 import axios from 'axios';
 
-const router = express.Router();
+const router = Router();
 
 interface AuthRequest extends Request {
   user?: any;
@@ -25,11 +25,26 @@ interface Project {
   maxCommits?: number;
 }
 
+interface GitLabBranch {
+  name: string;
+  default?: boolean;
+  protected?: boolean;
+  merged?: boolean;
+  commit?: {
+    id?: string;
+    short_id?: string;
+    message?: string;
+    committed_date?: string;
+  };
+}
+
 // 获取项目的提交记录
 router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId } = req.params;
     const { branch = 'master', since, until, page = 1, per_page = 20 } = req.query;
+
+    console.log('提交记录请求参数:', { projectId, branch, since, until, page, per_page });
 
     // 获取项目配置
     const projects = await storage.getProjects();
@@ -489,6 +504,149 @@ router.get('/projects/:projectId/users/:username', authenticateToken, async (req
         avatar_url: null,
         web_url: null
       }
+    });
+  }
+});
+
+// 获取项目的分支列表
+router.get('/projects/:projectId/branches', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { projectId } = req.params;
+
+    // 获取项目配置
+    const projects = await storage.getProjects();
+    const project = projects.find((p: Project) => p.id === projectId);
+    
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    console.log('获取项目分支列表:', {
+      name: project.name,
+      gitlabUrl: project.gitlabUrl,
+      hasToken: !!project.accessToken
+    });
+
+    // 验证和标准化GitLab URL
+    let gitlabBaseUrl = project.gitlabUrl.replace(/\/$/, '');
+    
+    if (!gitlabBaseUrl.startsWith('http://') && !gitlabBaseUrl.startsWith('https://')) {
+      gitlabBaseUrl = 'http://' + gitlabBaseUrl;
+    }
+
+    const urlParts = new URL(gitlabBaseUrl);
+    const cleanGitlabUrl = `${urlParts.protocol}//${urlParts.host}`;
+
+    // 构建GitLab API URL
+    let projectIdentifier = encodeURIComponent(project.name);
+    const apiUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/branches`;
+    
+    console.log('分支列表API URL:', apiUrl);
+    
+    // 调用GitLab API
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${project.accessToken}`,
+        'Accept': 'application/json'
+      },
+      timeout: 10000,
+      validateStatus: function (status) {
+        return status < 500;
+      }
+    });
+
+    console.log('GitLab分支API响应状态:', response.status);
+
+    if (response.status === 404) {
+      return res.status(404).json({ 
+        message: `GitLab项目 "${project.name}" 不存在或无法访问`,
+        details: '请检查项目名称和访问权限是否正确'
+      });
+    } else if (response.status === 401) {
+      return res.status(401).json({ 
+        message: 'GitLab访问令牌无效或已过期'
+      });
+    } else if (response.status === 403) {
+      return res.status(403).json({ 
+        message: 'GitLab访问被禁止，请检查令牌权限'
+      });
+    }
+
+    const branches = response.data;
+    console.log(`获取到 ${branches.length} 个分支`);
+
+    // 处理分支数据，提取分支名称
+    const branchList = branches.map((branch: GitLabBranch) => ({
+      name: branch.name,
+      default: branch.default || false,
+      protected: branch.protected || false,
+      merged: branch.merged || false,
+      commit: {
+        id: branch.commit?.id,
+        short_id: branch.commit?.short_id,
+        message: branch.commit?.message,
+        committed_date: branch.commit?.committed_date
+      }
+    }));
+
+    // 确定默认分支
+    let defaultBranch = 'master';
+    
+    // 1. 优先使用标记为default的分支
+    const defaultBranchObj = branchList.find((b: GitLabBranch) => b.default);
+    if (defaultBranchObj) {
+      defaultBranch = defaultBranchObj.name;
+    } else {
+      // 2. 查找常见的默认分支名称
+      const commonDefaultBranches = ['main', 'master', 'develop', 'dev'];
+      for (const commonBranch of commonDefaultBranches) {
+        if (branchList.find((b: GitLabBranch) => b.name === commonBranch)) {
+          defaultBranch = commonBranch;
+          break;
+        }
+      }
+    }
+
+    console.log(`默认分支设置为: ${defaultBranch}`);
+
+    res.json({
+      branches: branchList,
+      defaultBranch: defaultBranch,
+      total: branchList.length
+    });
+
+  } catch (error: any) {
+    console.error('获取分支列表失败:', error);
+    
+    let errorMessage = '获取分支列表失败';
+    let statusCode = 500;
+    
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage = 'GitLab服务器连接被拒绝，请检查URL是否正确';
+      statusCode = 503;
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = 'GitLab服务器域名无法解析，请检查URL';
+      statusCode = 503;
+    } else if (error.code === 'ETIMEDOUT') {
+      errorMessage = 'GitLab服务器连接超时';
+      statusCode = 504;
+    } else if (error.response?.status === 401) {
+      errorMessage = 'GitLab访问令牌无效或已过期';
+      statusCode = 401;
+    } else if (error.response?.status === 404) {
+      errorMessage = 'GitLab项目不存在或无法访问';
+      statusCode = 404;
+    } else if (error.response?.status === 403) {
+      errorMessage = 'GitLab访问被禁止，请检查令牌权限';
+      statusCode = 403;
+    }
+    
+    res.status(statusCode).json({ 
+      message: errorMessage,
+      error: error.message,
+      code: error.code,
+      responseStatus: error.response?.status,
+      responseData: error.response?.data
     });
   }
 });

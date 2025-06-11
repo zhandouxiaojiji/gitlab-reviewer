@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider, Row, Col, Statistic, Spin, Empty } from 'antd';
+import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider, Row, Col, Statistic, Spin, Empty, Select } from 'antd';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { 
   GitlabOutlined,
@@ -14,7 +14,9 @@ import {
   CodeOutlined,
   MessageOutlined,
   LinkOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  ExclamationCircleOutlined,
+  BranchesOutlined
 } from '@ant-design/icons';
 import api, { getApiUrl } from '../services/api';
 import MainLayout from './MainLayout';
@@ -49,6 +51,25 @@ interface CommitReview {
   key?: string;
 }
 
+interface GitLabBranch {
+  name: string;
+  default: boolean;
+  protected: boolean;
+  merged: boolean;
+  commit: {
+    id?: string;
+    short_id?: string;
+    message?: string;
+    committed_date?: string;
+  };
+}
+
+interface BranchesResponse {
+  branches: GitLabBranch[];
+  defaultBranch: string;
+  total: number;
+}
+
 const ProjectDetail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -62,6 +83,11 @@ const ProjectDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [userNicknames, setUserNicknames] = useState<{ [username: string]: string }>({});
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // 新增分支相关状态
+  const [branches, setBranches] = useState<GitLabBranch[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('master');
+  const [branchesLoading, setBranchesLoading] = useState(false);
 
   useEffect(() => {
     if (isInitialized) return; // 防止重复加载
@@ -104,13 +130,39 @@ const ProjectDetail: React.FC = () => {
     }
   };
 
+  // 获取分支列表
+  const loadBranches = useCallback(async () => {
+    if (!project) return;
+    
+    try {
+      setBranchesLoading(true);
+      const response = await api.get(`/api/gitlab/projects/${project.id}/branches`);
+      const branchData: BranchesResponse = response.data;
+      
+      setBranches(branchData.branches);
+      setSelectedBranch(branchData.defaultBranch);
+      
+      console.log(`获取到 ${branchData.branches.length} 个分支，默认分支: ${branchData.defaultBranch}`);
+    } catch (error: any) {
+      console.error('获取分支列表失败:', error);
+      message.error('获取分支列表失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setBranchesLoading(false);
+    }
+  }, [project]);
+
   const loadCommits = useCallback(async () => {
     if (!project) return;
     
     try {
       setLoading(true);
       
-      const response = await api.get(`/api/gitlab/projects/${project.id}/commits`);
+      // 使用选中的分支获取提交记录
+      const response = await api.get(`/api/gitlab/projects/${project.id}/commits`, {
+        params: {
+          branch: selectedBranch
+        }
+      });
       
       // 后端返回的数据结构是 { commits: [], userMappings: {}, ... }
       const responseData = response.data || {};
@@ -153,26 +205,34 @@ const ProjectDetail: React.FC = () => {
         };
       });
       
+      console.log(`从分支 ${selectedBranch} 获取到 ${formattedCommits.length} 条提交记录`);
       setCommits(formattedCommits);
-      console.log(`获取到 ${formattedCommits.length} 条提交记录（已根据项目审核范围 ${project?.reviewDays || 7} 天在后端过滤）`);
       
       // 清除错误状态
       setError(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('获取提交记录失败:', error);
+      message.error('获取提交记录失败: ' + (error.response?.data?.message || error.message));
+      setCommits([]);
       setError('获取提交记录失败，请检查GitLab连接或后端服务状态');
-      message.error('获取提交记录失败');
     } finally {
       setLoading(false);
     }
-  }, [project]);
+  }, [project, selectedBranch]);
 
-  // 当project变化时自动加载commits
+  // 加载分支列表
   useEffect(() => {
     if (project) {
+      loadBranches();
+    }
+  }, [project, loadBranches]);
+
+  // 当分支改变时重新加载提交记录
+  useEffect(() => {
+    if (project && selectedBranch && branches.length > 0) {
       loadCommits();
     }
-  }, [project, loadCommits]);
+  }, [project, selectedBranch, branches.length, loadCommits]);
 
   // 加载演示数据的函数
   const loadDemoData = () => {
@@ -537,6 +597,12 @@ const ProjectDetail: React.FC = () => {
     }
   };
 
+  // 分支选择变化处理
+  const handleBranchChange = (branchName: string) => {
+    console.log(`切换到分支: ${branchName}`);
+    setSelectedBranch(branchName);
+  };
+
   return (
     <MainLayout>
       <style>
@@ -552,74 +618,111 @@ const ProjectDetail: React.FC = () => {
         `}
       </style>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space style={{ marginBottom: '24px' }}>
+          <Button 
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate('/projects')}
+          >
+            返回项目列表
+          </Button>
+        </Space>
+
         {/* 项目信息卡片 */}
-        <Card>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <GitlabOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
-              <Title level={3} style={{ margin: 0 }}>{project.name}</Title>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
-              <div>
-                <Text type="secondary">GitLab地址:</Text>
-                <br />
-                <Text code>{project.gitlabUrl}</Text>
+        <Card style={{ marginBottom: '24px' }}>
+          <Row gutter={[16, 16]}>
+            <Col span={18}>
+              <Typography.Title level={3} style={{ margin: 0 }}>
+                {project?.name}
+              </Typography.Title>
+              <Typography.Text type="secondary" style={{ display: 'block', marginTop: '8px' }}>
+                {project?.description || '暂无描述'}
+              </Typography.Text>
+              <div style={{ marginTop: '12px' }}>
+                <Typography.Text strong>GitLab地址: </Typography.Text>
+                <Typography.Text copyable>{project?.gitlabUrl}</Typography.Text>
               </div>
-              {project.description && (
-                <div>
-                  <Text type="secondary">项目描述:</Text>
-                  <br />
-                  <Text>{project.description}</Text>
-                </div>
-              )}
-              <div>
-                <Text type="secondary">审核人员:</Text>
-                <br />
-                {project.reviewers && project.reviewers.length > 0 ? (
-                  <Space wrap>
-                    {project.reviewers.map(username => (
-                      <Tag key={username} color="blue">
-                        {userNicknames[username] || username}
-                      </Tag>
-                    ))}
-                  </Space>
-                ) : (
-                  <Text type="secondary">未配置</Text>
+              <div style={{ marginTop: '8px' }}>
+                <Typography.Text strong>审核范围: </Typography.Text>
+                <Typography.Text>{project?.reviewDays || 7} 天</Typography.Text>
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <Typography.Text strong>拉取记录上限: </Typography.Text>
+                <Typography.Text>{project?.maxCommits || 100} 条</Typography.Text>
+              </div>
+              
+              {/* 分支选择 */}
+              <div style={{ marginTop: '16px' }}>
+                <Typography.Text strong>当前分支: </Typography.Text>
+                <Select
+                  value={selectedBranch}
+                  onChange={handleBranchChange}
+                  loading={branchesLoading}
+                  style={{ minWidth: 150, marginLeft: 8 }}
+                  placeholder="选择分支"
+                  suffixIcon={<BranchesOutlined />}
+                >
+                  {branches.map(branch => (
+                    <Select.Option key={branch.name} value={branch.name}>
+                      <Space>
+                        <span>{branch.name}</span>
+                        {branch.default && <Tag color="blue">默认</Tag>}
+                        {branch.protected && <Tag color="red">保护</Tag>}
+                      </Space>
+                    </Select.Option>
+                  ))}
+                </Select>
+                {selectedBranch && branches.length > 0 && (
+                  <Typography.Text type="secondary" style={{ marginLeft: 16 }}>
+                    共 {branches.length} 个分支
+                  </Typography.Text>
                 )}
               </div>
-              <div>
-                <Text type="secondary">审核覆盖率:</Text>
-                <br />
-                <Text strong style={{ fontSize: '16px', color: reviewedCount === totalCount ? '#52c41a' : '#fa8c16' }}>
-                  {reviewRate}% ({reviewedCount}/{totalCount})
-                </Text>
-              </div>
-              <div>
-                <Text type="secondary">审核范围:</Text>
-                <br />
-                <Text>{project.reviewDays || 7} 天</Text>
-              </div>
-              <div>
-                <Text type="secondary">拉取记录上限:</Text>
-                <br />
-                <Text>{project.maxCommits || 100} 条</Text>
-              </div>
-            </div>
-          </Space>
+            </Col>
+            
+            {/* 统计信息 */}
+            <Col span={6}>
+              <Row gutter={[16, 16]}>
+                <Col span={12}>
+                  <Statistic
+                    title="总提交数"
+                    value={commits.length}
+                    prefix={<EyeOutlined />}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Statistic
+                    title="Review覆盖率"
+                    value={commits.length > 0 ? Math.round((reviewedCount / commits.length) * 100) : 0}
+                    suffix="%"
+                    prefix={<CheckCircleOutlined />}
+                  />
+                </Col>
+              </Row>
+            </Col>
+          </Row>
         </Card>
+
+        <Divider />
 
         {/* 提交记录表格 */}
         <Card 
-          title="提交记录与审查状态"
+          title={
+            <Space>
+              <span>提交记录</span>
+              {selectedBranch && (
+                <Tag icon={<BranchesOutlined />} color="processing">
+                  {selectedBranch}
+                </Tag>
+              )}
+            </Space>
+          }
           extra={
             <Button 
               type="primary" 
-              icon={<ReloadOutlined />} 
-              onClick={() => loadCommits()}
+              onClick={loadCommits}
               loading={loading}
             >
-              刷新数据
+              刷新
             </Button>
           }
         >
