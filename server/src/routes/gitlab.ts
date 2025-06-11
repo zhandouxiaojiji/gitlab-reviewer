@@ -21,6 +21,8 @@ interface Project {
   updatedAt?: string;
   isActive?: boolean;
   userMappings?: Record<string, string>;
+  reviewDays?: number;
+  maxCommits?: number;
 }
 
 // 获取项目的提交记录
@@ -40,7 +42,9 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
     console.log('项目配置:', {
       name: project.name,
       gitlabUrl: project.gitlabUrl,
-      hasToken: !!project.accessToken
+      hasToken: !!project.accessToken,
+      reviewDays: project.reviewDays,
+      maxCommits: project.maxCommits
     });
 
     // 验证和标准化GitLab URL
@@ -71,14 +75,31 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
     console.log('项目标识符:', projectIdentifier);
     console.log('原始项目名称:', project.name);
     
+    // 根据项目配置的审核范围自动设置时间范围
+    const reviewDays = project.reviewDays || 7; // 默认7天
+    const maxCommits = project.maxCommits || 100; // 默认100条
+    let sinceDate: string;
+    
+    if (!since) {
+      // 如果没有传入since参数，根据reviewDays计算
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - reviewDays);
+      sinceDate = cutoffDate.toISOString();
+      console.log(`根据审核范围 ${reviewDays} 天，自动设置since参数: ${sinceDate}`);
+    } else {
+      sinceDate = since as string;
+      console.log(`使用传入的since参数: ${sinceDate}`);
+    }
+    
+    console.log(`拉取记录上限设置为: ${maxCommits} 条`);
+    
     // 构建查询参数
     const params: any = {
       ref_name: branch,
-      page: page,
-      per_page: per_page
+      since: sinceDate, // 根据审核范围设置起始时间
+      per_page: maxCommits // 使用项目配置的拉取记录上限
     };
     
-    if (since) params.since = since;
     if (until) params.until = until;
 
     console.log('请求参数:', params);

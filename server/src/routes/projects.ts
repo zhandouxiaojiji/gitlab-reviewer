@@ -29,7 +29,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 创建新项目
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description, reviewers } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
@@ -50,6 +50,8 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       accessToken,
       description,
       reviewers: reviewers || [],
+      reviewDays: reviewDays || 7, // 审核范围默认7天
+      maxCommits: maxCommits || 100, // 拉取记录上限默认100条
       isActive: true,
       createdBy: req.user.id
     });
@@ -74,7 +76,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 更新项目
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description, reviewers } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits } = req.body;
     const projectId = req.params.id;
 
     const existingProject = projectStorage.findById(projectId);
@@ -101,6 +103,8 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       accessToken,
       description,
       reviewers: reviewers || [],
+      reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
+      maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
       updatedAt: new Date().toISOString()
     });
 

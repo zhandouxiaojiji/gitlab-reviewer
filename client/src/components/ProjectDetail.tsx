@@ -28,6 +28,8 @@ interface GitLabProject {
   description?: string;
   reviewers?: string[]; // 审核人员用户名列表
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
+  reviewDays?: number; // 审核范围（天数），默认7天
+  maxCommits?: number; // 拉取记录上限，默认100条
   createdAt: string;
 }
 
@@ -187,6 +189,8 @@ const ProjectDetail: React.FC = () => {
           reviewComments: commit.comments_count || 0
         };
       });
+
+      console.log(`获取到 ${formattedCommits.length} 条提交记录（已根据项目审核范围 ${project?.reviewDays || 7} 天在后端过滤）`);
 
       setCommits(formattedCommits);
       
@@ -583,11 +587,21 @@ const ProjectDetail: React.FC = () => {
                 )}
               </div>
               <div>
-                <Text type="secondary">审查覆盖率:</Text>
+                <Text type="secondary">审核覆盖率:</Text>
                 <br />
                 <Text strong style={{ fontSize: '16px', color: reviewedCount === totalCount ? '#52c41a' : '#fa8c16' }}>
                   {reviewRate}% ({reviewedCount}/{totalCount})
                 </Text>
+              </div>
+              <div>
+                <Text type="secondary">审核范围:</Text>
+                <br />
+                <Text>{project.reviewDays || 7} 天</Text>
+              </div>
+              <div>
+                <Text type="secondary">拉取记录上限:</Text>
+                <br />
+                <Text>{project.maxCommits || 100} 条</Text>
               </div>
             </div>
           </Space>

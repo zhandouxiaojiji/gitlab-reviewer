@@ -66,6 +66,8 @@ export const projectStorage = {
       ...projectData,
       userMappings: {},
       reviewers: projectData.reviewers || [],
+      reviewDays: projectData.reviewDays || 7,
+      maxCommits: projectData.maxCommits || 100,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

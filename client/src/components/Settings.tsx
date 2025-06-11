@@ -37,6 +37,8 @@ interface GitLabProject {
   description?: string;
   reviewers?: string[]; // 审核人员用户名列表
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
+  reviewDays?: number; // 审核范围（天数），默认7天
+  maxCommits?: number; // 拉取记录上限，默认100条
   createdAt: string;
 }
 
@@ -101,7 +103,9 @@ const Settings: React.FC = () => {
     setEditingProject(project);
     form.setFieldsValue({
       ...project,
-      reviewers: project.reviewers || []
+      reviewers: project.reviewers || [],
+      reviewDays: project.reviewDays || 7,
+      maxCommits: project.maxCommits || 100
     });
     // 加载项目用户列表
     loadProjectUsers(project);
@@ -370,6 +374,38 @@ const Settings: React.FC = () => {
                 </Select.Option>
               ))}
             </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="审核范围"
+            name="reviewDays"
+            help="显示多少天内的代码提交记录，默认7天"
+            initialValue={7}
+          >
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              suffix="天"
+              placeholder="请输入天数"
+              style={{ width: '200px' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="拉取记录上限"
+            name="maxCommits"
+            help="从GitLab拉取的提交记录数量上限，默认100条"
+            initialValue={100}
+          >
+            <Input
+              type="number"
+              min={10}
+              max={1000}
+              suffix="条"
+              placeholder="请输入记录数"
+              style={{ width: '200px' }}
+            />
           </Form.Item>
 
           <Form.Item
