@@ -122,20 +122,36 @@ const ProjectDetail: React.FC = () => {
       }
       
       // 将后端格式转换为前端期望的格式
-      const formattedCommits = commitsData.map((commit: any) => ({
-        id: commit.id,
-        commitId: commit.short_id,
-        fullCommitId: commit.id,
-        commitMessage: commit.message,
-        author: commit.author_name,
-        date: commit.committed_date,
-        hasReview: commit.has_comments,
-        reviewer: commit.comments?.[0]?.author?.name || '',
-        allReviewers: commit.comments?.map((comment: any) => comment.author?.name || comment.author?.username || '').filter(Boolean) || [],
-        reviewComments: commit.comments_count || 0,
-        gitlabUrl: commit.web_url,
-        key: commit.id
-      }));
+      const formattedCommits = commitsData.map((commit: any) => {
+        // 提取所有评论者的用户名，优先使用username，其次name
+        const allReviewers = commit.comments?.map((comment: any) => {
+          if (comment.author) {
+            // 优先使用username，如果没有则使用name
+            return comment.author.username || comment.author.name || '';
+          }
+          return '';
+        }).filter(Boolean) || [];
+        
+        // 去重评论者
+        const uniqueReviewers = Array.from(new Set(allReviewers));
+        
+        console.log(`提交 ${commit.short_id} 的评论者:`, uniqueReviewers);
+        
+        return {
+          id: commit.id,
+          commitId: commit.short_id,
+          fullCommitId: commit.id,
+          commitMessage: commit.message,
+          author: commit.author_name,
+          date: commit.committed_date,
+          hasReview: commit.has_comments,
+          reviewer: uniqueReviewers[0] || '', // 第一个评论者作为主要审核人（兼容性）
+          allReviewers: uniqueReviewers, // 所有参与评论的人员
+          reviewComments: commit.comments_count || 0,
+          gitlabUrl: commit.web_url,
+          key: commit.id
+        };
+      });
       
       setCommits(formattedCommits);
       console.log(`获取到 ${formattedCommits.length} 条提交记录（已根据项目审核范围 ${project?.reviewDays || 7} 天在后端过滤）`);
@@ -251,10 +267,17 @@ const ProjectDetail: React.FC = () => {
         };
       }
       
-      // 检查所有需要审核的人员是否都已经审核
+      // 检查实际评论的人员中，有多少是配置的审核人员
+      const actualReviewers = commit.allReviewers || [];
       const reviewedCount = requiredReviewers.filter(reviewer => 
-        commit.allReviewers?.includes(reviewer)
+        actualReviewers.includes(reviewer)
       ).length;
+      
+      console.log(`提交 ${commit.commitId} 审核状态检查:`, {
+        requiredReviewers,
+        actualReviewers,
+        reviewedCount
+      });
       
       if (reviewedCount === requiredReviewers.length) {
         // 所有需要的人员都已审核
@@ -404,9 +427,8 @@ const ProjectDetail: React.FC = () => {
                   {project.reviewers
                     .filter(reviewer => reviewer !== commit.author) // 排除提交人自己
                     .map(reviewer => {
-                      // 检查该审核人员是否已审核 - 使用allReviewers信息
-                      const hasReviewed = commit.allReviewers?.includes(reviewer) || 
-                                         (commit.hasReview && commit.reviewer === reviewer);
+                      // 检查该审核人员是否已审核 - 直接检查allReviewers数组
+                      const hasReviewed = commit.allReviewers?.includes(reviewer) || false;
                       return (
                         <Tag 
                           key={reviewer} 
