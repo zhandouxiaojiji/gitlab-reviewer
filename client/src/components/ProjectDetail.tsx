@@ -252,6 +252,79 @@ const ProjectDetail: React.FC = () => {
 
   // 删除原来的 columns 定义，替换为列表渲染函数
   const renderCommitItem = (commit: CommitReview) => {
+    // 计算审查状态
+    const getReviewStatus = () => {
+      // 获取需要审核此提交的人员（排除提交人自己）
+      const requiredReviewers = project?.reviewers?.filter(reviewer => reviewer !== commit.author) || [];
+      
+      // 如果当前用户不在审核人员列表中，或者这是当前用户自己的提交
+      if (!project?.reviewers?.includes(username!) || commit.author === username) {
+        return { 
+          status: 'none', 
+          text: '无需审核', 
+          color: 'default',
+          icon: <CheckCircleOutlined />
+        };
+      }
+      
+      // 如果没有其他人需要审核（当前用户是唯一审核人员但这是别人的提交）
+      if (requiredReviewers.length === 0) {
+        return { 
+          status: 'none', 
+          text: '无需审核', 
+          color: 'default',
+          icon: <CheckCircleOutlined />
+        };
+      }
+      
+      // 当前用户需要审核的情况
+      if (requiredReviewers.includes(username!)) {
+        // 检查当前用户是否已经审核
+        const currentUserReviewed = commit.hasReview && commit.reviewer === username;
+        
+        if (currentUserReviewed) {
+          // 当前用户已审核，检查其他人的审核状态
+          // 注意：当前数据结构只支持单人审核，所以如果当前用户已审核，就认为完成了
+          // 如果需要支持多人审核，需要修改数据结构
+          if (requiredReviewers.length === 1) {
+            // 只有当前用户需要审核
+            return { 
+              status: 'completed', 
+              text: '已审核', 
+              color: 'success',
+              icon: <CheckCircleOutlined />
+            };
+          } else {
+            // 还有其他人需要审核（但当前数据结构无法判断其他人的审核状态）
+            return { 
+              status: 'waiting-others', 
+              text: '待其它人员审核', 
+              color: 'processing',
+              icon: <ClockCircleOutlined />
+            };
+          }
+        } else {
+          // 当前用户还未审核
+          return { 
+            status: 'pending', 
+            text: '待审核', 
+            color: 'warning',
+            icon: <ClockCircleOutlined />
+          };
+        }
+      }
+      
+      // 默认状态（理论上不应该到达这里）
+      return { 
+        status: 'unknown', 
+        text: '状态未知', 
+        color: 'default',
+        icon: <ClockCircleOutlined />
+      };
+    };
+
+    const reviewStatus = getReviewStatus();
+
     return (
     <div
       className="commit-item"
@@ -299,15 +372,9 @@ const ProjectDetail: React.FC = () => {
           
           {/* 右侧状态 */}
           <div style={{ marginLeft: '16px', flexShrink: 0 }}>
-            {commit.hasReview ? (
-              <Tag icon={<CheckCircleOutlined />} color="success">
-                已审核
-              </Tag>
-            ) : (
-              <Tag icon={<ClockCircleOutlined />} color="warning">
-                待审核
-              </Tag>
-            )}
+            <Tag icon={reviewStatus.icon} color={reviewStatus.color}>
+              {reviewStatus.text}
+            </Tag>
           </div>
         </div>
 
