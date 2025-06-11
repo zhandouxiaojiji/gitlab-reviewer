@@ -336,38 +336,7 @@ const ProjectDetail: React.FC = () => {
           )}
         </div>
 
-        {/* 审核人员信息 */}
-        {project?.reviewers && project.reviewers.length > 0 && (
-          <div style={{ marginBottom: '12px' }}>
-            <Text type="secondary" style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>
-              需要审核人员:
-            </Text>
-            <Space wrap size={[4, 4]}>
-              {project.reviewers
-                .filter(reviewer => reviewer !== commit.author) // 排除提交人自己
-                .map(reviewer => {
-                  const hasReviewed = commit.hasReview && commit.reviewer === reviewer;
-                  return (
-                    <Tag 
-                      key={reviewer} 
-                      color={hasReviewed ? "green" : "default"}
-                      style={{ fontSize: '11px', margin: '2px' }}
-                    >
-                      {userNicknames[reviewer] || reviewer}
-                      {hasReviewed && ' ✓'}
-                    </Tag>
-                  );
-                })}
-            </Space>
-            {project.reviewers.filter(reviewer => reviewer !== commit.author).length === 0 && (
-              <Text type="secondary" style={{ fontSize: '11px' }}>
-                提交人是唯一审核人员，无需其他人审核
-              </Text>
-            )}
-          </div>
-        )}
-
-        {/* 底部：提交ID和操作按钮 */}
+        {/* 底部：提交ID和操作按钮 + 审核人员信息 */}
         <div style={{ 
           display: 'flex', 
           alignItems: 'center', 
@@ -397,6 +366,37 @@ const ProjectDetail: React.FC = () => {
             >
               复制
             </Button>
+            
+            {/* 审核人员信息 */}
+            {project?.reviewers && project.reviewers.length > 0 && (
+              <div style={{ marginLeft: '16px' }}>
+                <Text type="secondary" style={{ fontSize: '11px', marginRight: '6px' }}>
+                  需要审核人员:
+                </Text>
+                <Space wrap size={[2, 2]}>
+                  {project.reviewers
+                    .filter(reviewer => reviewer !== commit.author) // 排除提交人自己
+                    .map(reviewer => {
+                      const hasReviewed = commit.hasReview && commit.reviewer === reviewer;
+                      return (
+                        <Tag 
+                          key={reviewer} 
+                          color={hasReviewed ? "green" : "default"}
+                          style={{ fontSize: '10px', margin: '1px', padding: '0 4px', lineHeight: '16px' }}
+                        >
+                          {userNicknames[reviewer] || reviewer}
+                          {hasReviewed && ' ✓'}
+                        </Tag>
+                      );
+                    })}
+                </Space>
+                {project.reviewers.filter(reviewer => reviewer !== commit.author).length === 0 && (
+                  <Text type="secondary" style={{ fontSize: '10px' }}>
+                    提交人是唯一审核人员，无需其他人审核
+                  </Text>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
