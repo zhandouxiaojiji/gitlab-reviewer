@@ -90,8 +90,6 @@ const ProjectDetail: React.FC = () => {
   const [branchesLoading, setBranchesLoading] = useState(false);
 
   useEffect(() => {
-    if (isInitialized) return; // 防止重复加载
-    
     if (!username) {
       navigate('/login');
       return;
@@ -101,9 +99,16 @@ const ProjectDetail: React.FC = () => {
       return;
     }
     
-    setIsInitialized(true);
+    // 重置状态，允许重新加载
+    setIsInitialized(false);
+    setProject(null);
+    setCommits([]);
+    setBranches([]);
+    setSelectedBranch('master');
+    setError(null);
+    
     loadProjects();
-  }, [username, projectName]); // 移除navigate依赖
+  }, [username, projectName, navigate]); // 添加 navigate 和 projectName 到依赖项
 
   const loadProjects = async () => {
     try {
@@ -119,6 +124,8 @@ const ProjectDetail: React.FC = () => {
         if (foundProject.userMappings) {
           setUserNicknames(foundProject.userMappings);
         }
+        // 设置初始化完成
+        setIsInitialized(true);
         // 项目设置后，loadCommits会通过useCallback自动执行
       } else {
         message.error('未找到指定项目');
@@ -618,15 +625,6 @@ const ProjectDetail: React.FC = () => {
         `}
       </style>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <Space style={{ marginBottom: '24px' }}>
-          <Button 
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/projects')}
-          >
-            返回项目列表
-          </Button>
-        </Space>
-
         {/* 项目信息卡片 */}
         <Card style={{ marginBottom: '24px' }}>
           <Row gutter={[16, 16]}>
