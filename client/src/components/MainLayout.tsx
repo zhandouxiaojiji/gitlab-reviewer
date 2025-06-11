@@ -163,7 +163,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider trigger={null} collapsible>
+      <Sider trigger={null} collapsible style={{ display: 'flex', flexDirection: 'column' }}>
         <div 
           style={{ 
             height: 64, 
@@ -187,34 +187,46 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           selectedKeys={[getSelectedKey()]}
           onClick={({ key }) => handleMenuClick(key)}
           items={getMenuItems()}
+          style={{ flex: 1, border: 'none' }}
         />
-      </Sider>
-      <Layout>
-        <Header style={{ 
-          padding: '0 16px', 
-          background: '#fff',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+        
+        {/* 底部用户信息和退出登录 */}
+        <div style={{ 
+          padding: '16px 12px',
+          borderTop: '1px solid #434343',
+          backgroundColor: '#001529',
+          marginTop: 'auto'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h2 style={{ margin: 0 }}>
-              {projectName ? `${decodeURIComponent(projectName)} - GitLab 代码审查` : 'GitLab 代码审查管理'}
-            </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <UserOutlined />
-              <Text strong>{userNickname || username}</Text>
-            </div>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px',
+            marginBottom: '12px',
+            color: 'rgba(255, 255, 255, 0.85)'
+          }}>
+            <UserOutlined style={{ color: 'rgba(255, 255, 255, 0.65)' }} />
+            <Text style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '14px' }}>
+              {userNickname || username}
+            </Text>
           </div>
           <Button 
-            type="text" 
+            type="default"
+            size="small"
             icon={<LogoutOutlined />} 
             onClick={handleLogout}
+            style={{ 
+              width: '100%',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
+              color: 'rgba(255, 255, 255, 0.85)'
+            }}
           >
             退出登录
           </Button>
-        </Header>
-        <Content style={{ margin: '16px' }}>
+        </div>
+      </Sider>
+      <Layout>
+        <Content style={{ padding: '16px' }}>
           {children}
         </Content>
       </Layout>
