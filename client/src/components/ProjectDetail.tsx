@@ -40,6 +40,7 @@ interface CommitReview {
   date: string;
   hasReview: boolean;
   reviewer?: string;
+  allReviewers?: string[]; // 所有参与评论的审核人员
   reviewComments: number;
   gitlabUrl?: string;
   key?: string;
@@ -143,10 +144,33 @@ const ProjectDetail: React.FC = () => {
 
       // 格式化提交数据
       const formattedCommits = commits.map((commit: any, index: number) => {
-        // 获取第一个评论的作者作为审核人
-        let reviewer = '';
+        // 获取所有评论作者
+        let allReviewers: string[] = [];
+        
         if (commit.has_comments && commit.comments && commit.comments.length > 0) {
-          reviewer = commit.comments[0].author?.username || commit.comments[0].author?.name || '';
+          console.log(`提交 ${commit.short_id || commit.id?.substring(0, 8)} 的评论数据:`, commit.comments);
+          
+          // 获取所有评论作者，尝试多种方式获取用户名
+          const commentAuthors = commit.comments.map((comment: any) => {
+            const author = comment.author?.username || 
+                          comment.author?.name || 
+                          comment.author?.login ||
+                          comment.username ||
+                          comment.author ||
+                          '';
+            console.log('评论作者信息:', comment.author, '提取的作者:', author);
+            return author;
+          }).filter((author: string) => author !== '' && author !== commit.author_name); // 排除提交人自己的评论
+          
+          console.log('提取的评论作者列表:', commentAuthors);
+          console.log('提交人:', commit.author_name);
+          
+          // 去重
+          allReviewers = Array.from(new Set(commentAuthors));
+          
+          console.log('去重后的审核人员:', allReviewers);
+        } else {
+          console.log(`提交 ${commit.short_id || commit.id?.substring(0, 8)} 没有评论或评论数据为空`);
         }
         
         return {
@@ -158,7 +182,8 @@ const ProjectDetail: React.FC = () => {
           author: commit.author_name || '未知作者',
           date: commit.committed_date || new Date().toISOString(),
           hasReview: commit.has_comments || false,
-          reviewer: reviewer,
+          reviewer: allReviewers.length > 0 ? allReviewers[0] : '', // 保留第一个作为主要审核人（用于兼容）
+          allReviewers: allReviewers, // 所有参与评论的审核人员
           reviewComments: commit.comments_count || 0
         };
       });
@@ -257,8 +282,8 @@ const ProjectDetail: React.FC = () => {
       // 获取需要审核此提交的人员（排除提交人自己）
       const requiredReviewers = project?.reviewers?.filter(reviewer => reviewer !== commit.author) || [];
       
-      // 如果当前用户不在审核人员列表中，或者这是当前用户自己的提交
-      if (!project?.reviewers?.includes(username!) || commit.author === username) {
+      // 如果没有配置审核人员或者没有人需要审核此提交
+      if (!project?.reviewers || project.reviewers.length === 0 || requiredReviewers.length === 0) {
         return { 
           status: 'none', 
           text: '无需审核', 
@@ -267,60 +292,36 @@ const ProjectDetail: React.FC = () => {
         };
       }
       
-      // 如果没有其他人需要审核（当前用户是唯一审核人员但这是别人的提交）
-      if (requiredReviewers.length === 0) {
+      // 检查所有需要审核的人员是否都已经审核
+      const reviewedCount = requiredReviewers.filter(reviewer => 
+        commit.allReviewers?.includes(reviewer)
+      ).length;
+      
+      if (reviewedCount === requiredReviewers.length) {
+        // 所有需要的人员都已审核
         return { 
-          status: 'none', 
-          text: '无需审核', 
-          color: 'default',
+          status: 'completed', 
+          text: '已审核', 
+          color: 'success',
           icon: <CheckCircleOutlined />
         };
+      } else if (reviewedCount > 0) {
+        // 部分人员已审核
+        return { 
+          status: 'partial', 
+          text: `部分审核 (${reviewedCount}/${requiredReviewers.length})`, 
+          color: 'processing',
+          icon: <ClockCircleOutlined />
+        };
+      } else {
+        // 没有人审核
+        return { 
+          status: 'pending', 
+          text: '待审核', 
+          color: 'warning',
+          icon: <ClockCircleOutlined />
+        };
       }
-      
-      // 当前用户需要审核的情况
-      if (requiredReviewers.includes(username!)) {
-        // 检查当前用户是否已经审核
-        const currentUserReviewed = commit.hasReview && commit.reviewer === username;
-        
-        if (currentUserReviewed) {
-          // 当前用户已审核，检查其他人的审核状态
-          // 注意：当前数据结构只支持单人审核，所以如果当前用户已审核，就认为完成了
-          // 如果需要支持多人审核，需要修改数据结构
-          if (requiredReviewers.length === 1) {
-            // 只有当前用户需要审核
-            return { 
-              status: 'completed', 
-              text: '已审核', 
-              color: 'success',
-              icon: <CheckCircleOutlined />
-            };
-          } else {
-            // 还有其他人需要审核（但当前数据结构无法判断其他人的审核状态）
-            return { 
-              status: 'waiting-others', 
-              text: '待其它人员审核', 
-              color: 'processing',
-              icon: <ClockCircleOutlined />
-            };
-          }
-        } else {
-          // 当前用户还未审核
-          return { 
-            status: 'pending', 
-            text: '待审核', 
-            color: 'warning',
-            icon: <ClockCircleOutlined />
-          };
-        }
-      }
-      
-      // 默认状态（理论上不应该到达这里）
-      return { 
-        status: 'unknown', 
-        text: '状态未知', 
-        color: 'default',
-        icon: <ClockCircleOutlined />
-      };
     };
 
     const reviewStatus = getReviewStatus();
@@ -395,10 +396,10 @@ const ProjectDetail: React.FC = () => {
             <ClockCircleOutlined style={{ marginRight: '4px' }} />
             {formatDate(commit.date)}
           </Text>
-          {commit.hasReview && commit.reviewer && (
+          {commit.hasReview && commit.allReviewers && commit.allReviewers.length > 0 && (
             <Text type="secondary">
               <CheckCircleOutlined style={{ marginRight: '4px' }} />
-              审核人: {userNicknames[commit.reviewer] || commit.reviewer}
+              审核人: {commit.allReviewers.map(reviewer => userNicknames[reviewer] || reviewer).join(', ')}
             </Text>
           )}
         </div>
@@ -444,7 +445,9 @@ const ProjectDetail: React.FC = () => {
                   {project.reviewers
                     .filter(reviewer => reviewer !== commit.author) // 排除提交人自己
                     .map(reviewer => {
-                      const hasReviewed = commit.hasReview && commit.reviewer === reviewer;
+                      // 检查该审核人员是否已审核 - 使用allReviewers信息
+                      const hasReviewed = commit.allReviewers?.includes(reviewer) || 
+                                         (commit.hasReview && commit.reviewer === reviewer);
                       return (
                         <Tag 
                           key={reviewer} 

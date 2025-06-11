@@ -204,6 +204,8 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
           
           const comments = commentsResponse.data;
           
+          console.log(`提交 ${commit.short_id} 的评论数据:`, JSON.stringify(comments, null, 2));
+          
           return {
             id: commit.id,
             short_id: commit.short_id,
@@ -214,11 +216,14 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
             web_url: commit.web_url,
             has_comments: comments.length > 0,
             comments_count: comments.length,
-            comments: comments.map((comment: any) => ({
-              author: comment.author,
-              created_at: comment.created_at,
-              note: comment.note
-            }))
+            comments: comments.map((comment: any) => {
+              console.log(`处理评论作者信息:`, comment.author);
+              return {
+                author: comment.author,
+                created_at: comment.created_at,
+                note: comment.note
+              };
+            })
           };
         } catch (error) {
           console.warn(`获取提交 ${commit.id} 的评论失败:`, error instanceof Error ? error.message : error);
