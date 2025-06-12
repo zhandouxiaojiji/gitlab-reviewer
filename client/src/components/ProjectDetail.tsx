@@ -1,27 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Button, Space, message, Typography, List, Avatar, Tooltip, Divider, Row, Col, Statistic, Spin, Empty, Select } from 'antd';
-import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import { Card, Tag, Button, Space, message, Typography, List, Avatar, Divider, Row, Col, Statistic, Select } from 'antd';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  GitlabOutlined,
   EyeOutlined,
-  CommentOutlined,
-  CalendarOutlined,
   UserOutlined,
-  ReloadOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CopyOutlined,
   CodeOutlined,
   MessageOutlined,
   LinkOutlined,
-  ArrowLeftOutlined,
-  ExclamationCircleOutlined,
   BranchesOutlined
 } from '@ant-design/icons';
-import api, { getApiUrl } from '../services/api';
+import api from '../services/api';
 import MainLayout from './MainLayout';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface GitLabProject {
   id: string;
@@ -76,18 +70,40 @@ const ProjectDetail: React.FC = () => {
   const username = searchParams.get('user');
   const projectName = searchParams.get('project');
   
-  const [projects, setProjects] = useState<GitLabProject[]>([]);
   const [project, setProject] = useState<GitLabProject | null>(null);
   const [commits, setCommits] = useState<CommitReview[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userNicknames, setUserNicknames] = useState<{ [username: string]: string }>({});
-  const [isInitialized, setIsInitialized] = useState(false);
 
   // 新增分支相关状态
   const [branches, setBranches] = useState<GitLabBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>('master');
   const [branchesLoading, setBranchesLoading] = useState(false);
+
+  const loadProjects = useCallback(async () => {
+    try {
+      const response = await api.get('/api/projects');
+      const projectsData = response.data || [];
+      
+      // 根据项目名称查找项目
+      const foundProject = projectsData.find((p: GitLabProject) => p.name === decodeURIComponent(projectName!));
+      if (foundProject) {
+        setProject(foundProject);
+        // 设置用户映射关系
+        if (foundProject.userMappings) {
+          setUserNicknames(foundProject.userMappings);
+        }
+        // 项目设置后，loadCommits会通过useCallback自动执行
+      } else {
+        message.error('未找到指定项目');
+        navigate(`/dashboard?user=${username}`);
+      }
+    } catch (error) {
+      message.error('加载项目信息失败');
+      navigate(`/dashboard?user=${username}`);
+    }
+  }, [projectName, navigate, username]);
 
   useEffect(() => {
     if (!username) {
@@ -100,7 +116,6 @@ const ProjectDetail: React.FC = () => {
     }
     
     // 重置状态，允许重新加载
-    setIsInitialized(false);
     setProject(null);
     setCommits([]);
     setBranches([]);
@@ -108,34 +123,7 @@ const ProjectDetail: React.FC = () => {
     setError(null);
     
     loadProjects();
-  }, [username, projectName, navigate]); // 添加 navigate 和 projectName 到依赖项
-
-  const loadProjects = async () => {
-    try {
-      const response = await api.get('/api/projects');
-      const projectsData = response.data || [];
-      setProjects(projectsData);
-      
-      // 根据项目名称查找项目
-      const foundProject = projectsData.find((p: GitLabProject) => p.name === decodeURIComponent(projectName!));
-      if (foundProject) {
-        setProject(foundProject);
-        // 设置用户映射关系
-        if (foundProject.userMappings) {
-          setUserNicknames(foundProject.userMappings);
-        }
-        // 设置初始化完成
-        setIsInitialized(true);
-        // 项目设置后，loadCommits会通过useCallback自动执行
-      } else {
-        message.error('未找到指定项目');
-        navigate(`/dashboard?user=${username}`);
-      }
-    } catch (error) {
-      message.error('加载项目信息失败');
-      navigate(`/dashboard?user=${username}`);
-    }
-  };
+  }, [username, projectName, navigate, loadProjects]);
 
   // 获取分支列表
   const loadBranches = useCallback(async () => {
@@ -149,7 +137,6 @@ const ProjectDetail: React.FC = () => {
       setBranches(branchData.branches);
       setSelectedBranch(branchData.defaultBranch);
       
-      console.log(`获取到 ${branchData.branches.length} 个分支，默认分支: ${branchData.defaultBranch}`);
     } catch (error: any) {
       console.error('获取分支列表失败:', error);
       message.error('获取分支列表失败: ' + (error.response?.data?.message || error.message));
@@ -194,8 +181,6 @@ const ProjectDetail: React.FC = () => {
         // 去重评论者
         const uniqueReviewers = Array.from(new Set(allReviewers));
         
-        console.log(`提交 ${commit.short_id} 的评论者:`, uniqueReviewers);
-        
         return {
           id: commit.id,
           commitId: commit.short_id,
@@ -212,7 +197,6 @@ const ProjectDetail: React.FC = () => {
         };
       });
       
-      console.log(`从分支 ${selectedBranch} 获取到 ${formattedCommits.length} 条提交记录`);
       setCommits(formattedCommits);
       
       // 清除错误状态
@@ -351,18 +335,6 @@ const ProjectDetail: React.FC = () => {
       const reviewedCount = requiredReviewers.filter(reviewer => 
         actualReviewers.includes(reviewer)
       ).length;
-      
-      console.log(`提交 ${commit.commitId} 审核状态检查:`, {
-        currentUser: username,
-        commitAuthor: commit.author,
-        userNicknames,
-        isOwnCommit: commit.author === username || 
-                     (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
-                     (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author),
-        requiredReviewers,
-        actualReviewers,
-        reviewedCount
-      });
       
       if (reviewedCount === requiredReviewers.length) {
         // 所有需要的人员都已审核
@@ -603,36 +575,10 @@ const ProjectDetail: React.FC = () => {
     return { reviewedCount, totalCount, reviewRate };
   };
 
-  const { reviewedCount, totalCount, reviewRate } = calculateReviewStats();
-
-  const refreshUserMappings = async () => {
-    if (!project?.id) {
-      message.error('项目ID不存在，无法刷新用户映射关系');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      const response = await api.post(`/api/projects/${project.id}/refresh-users`);
-      
-      // 更新本地状态
-      if (response.data.userMappings) {
-        setUserNicknames(response.data.userMappings);
-      }
-      
-      message.success(`用户映射关系刷新成功，共更新 ${response.data.userCount} 个用户`);
-    } catch (error) {
-      console.error('刷新用户映射关系失败:', error);
-      message.error('刷新用户映射关系失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { reviewedCount } = calculateReviewStats();
 
   // 分支选择变化处理
   const handleBranchChange = (branchName: string) => {
-    console.log(`切换到分支: ${branchName}`);
     setSelectedBranch(branchName);
   };
 
