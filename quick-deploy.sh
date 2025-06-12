@@ -57,9 +57,9 @@ mkdir -p ./data
 
 # 拉取最新镜像
 echo "📦 拉取最新Docker镜像..."
-if ! docker pull your-dockerhub-username/gitlab-reviewer:latest; then
+if ! docker pull zhandouxiaojiji/gitlab-reviewer:latest; then
     echo "⚠️  拉取镜像失败，尝试本地构建..."
-    if ! docker build -t your-dockerhub-username/gitlab-reviewer:latest .; then
+    if ! docker build -t zhandouxiaojiji/gitlab-reviewer:latest .; then
         echo "❌ 构建镜像失败"
         exit 1
     fi
@@ -81,7 +81,7 @@ docker run -d \
     -e PORT=3001 \
     -e REACT_APP_API_URL="$API_URL" \
     --restart unless-stopped \
-    your-dockerhub-username/gitlab-reviewer:latest
+    zhandouxiaojiji/gitlab-reviewer:latest
 
 # 等待服务启动
 echo "⏳ 等待服务启动..."
