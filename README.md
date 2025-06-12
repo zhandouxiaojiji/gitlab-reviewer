@@ -3,6 +3,8 @@
 ![Docker Image](https://img.shields.io/badge/docker-zhandouxiaojiji%2Fgitlab--reviewer-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+![](./images/preview.png)
+
 重要提示：本项目完全由Cursor开发，我们只注重功能的可用性，不对代码质量做任何保证！
 
 ## 项目介绍
@@ -18,16 +20,6 @@
 - 我们是以gitlab上的commit的评论作为是否已审核的依据
 - 系统会自动检测GitLab提交记录的评论，统计审核状态
 
-## 功能特性
-
-- 🔐 **用户认证** - 安全的登录验证机制
-- 📊 **项目管理** - 支持多个GitLab项目配置
-- 👥 **审核人员配置** - 灵活的审核人员分配
-- 📈 **审核统计** - 实时显示审核覆盖率
-- 🎯 **用户映射** - 自动映射GitLab用户名到中文昵称
-- ⚙️ **灵活配置** - 可配置审核时间范围和记录数量上限
-- 🔄 **实时同步** - 自动同步GitLab提交和评论数据
-
 ## 技术栈
 
 - **前端**: React + TypeScript + Ant Design Pro
@@ -40,10 +32,10 @@
 
 ```bash
 # 下载并运行快速部署脚本
-curl -sSL https://raw.githubusercontent.com/your-username/gitlab-reviewer/main/quick-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/zhandouxiaojiji/gitlab-reviewer/main/quick-deploy.sh | bash
 
 # 或者下载仓库后运行
-git clone https://github.com/your-username/gitlab-reviewer.git
+git clone https://github.com/zhandouxiaojiji/gitlab-reviewer.git
 cd gitlab-reviewer
 chmod +x quick-deploy.sh
 ./quick-deploy.sh
