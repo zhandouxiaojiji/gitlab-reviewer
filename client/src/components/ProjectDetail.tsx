@@ -321,6 +321,18 @@ const ProjectDetail: React.FC = () => {
   const renderCommitItem = (commit: CommitReview) => {
     // 计算审查状态
     const getReviewStatus = () => {
+      // 首先检查：如果当前登录用户查看自己的提交，显示"本人提交"
+      if (commit.author === username || 
+          (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
+          (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author)) {
+        return { 
+          status: 'own', 
+          text: '本人提交', 
+          color: 'blue',
+          icon: <UserOutlined />
+        };
+      }
+      
       // 获取需要审核此提交的人员（排除提交人自己）
       const requiredReviewers = project?.reviewers?.filter(reviewer => reviewer !== commit.author) || [];
       
@@ -341,6 +353,12 @@ const ProjectDetail: React.FC = () => {
       ).length;
       
       console.log(`提交 ${commit.commitId} 审核状态检查:`, {
+        currentUser: username,
+        commitAuthor: commit.author,
+        userNicknames,
+        isOwnCommit: commit.author === username || 
+                     (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
+                     (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author),
         requiredReviewers,
         actualReviewers,
         reviewedCount
@@ -563,6 +581,14 @@ const ProjectDetail: React.FC = () => {
     const totalCount = commits.length;
 
     commits.forEach(commit => {
+      // 首先检查：如果是当前用户自己的提交，算作无需审核（已完成）
+      if (commit.author === username || 
+          (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
+          (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author)) {
+        reviewedCount++;
+        return;
+      }
+      
       const requiredReviewers = project.reviewers!.filter(reviewer => reviewer !== commit.author);
       if (requiredReviewers.length === 0) {
         // 如果提交人是唯一的审核人员，则认为不需要审核
