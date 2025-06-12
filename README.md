@@ -27,16 +27,17 @@
 - 输入gitlab的同名账号，登录不需要密码，账号只是个标识，如果与gitlab的账号系统有匹配的账号，会自动显示该账号的昵称
 
 #### 2. GitLab Token 准备
-在配置项目之前，需要先获取GitLab Access Token：
-1. 登录你的GitLab
-2. 点击右上角头像 → Settings → Access Tokens
-3. 创建Personal Access Token，必须勾选以下权限：
+在配置项目之前，需要先获取项目仓库的Access Token：
+1. 登录你的GitLab，进入要配置的项目仓库
+2. 在项目页面点击 Settings → Access Tokens（或者Settings → Repository → Deploy tokens）
+3. 创建项目级别的Access Token，必须勾选以下权限：
    - ✅ `read_api` - 读取API权限
    - ✅ `read_repository` - 读取仓库权限  
-   - ✅ `read_user` - 读取用户信息权限
 4. 设置过期时间（建议选择较长时间或永不过期）
-5. 点击"Create personal access token"
+5. 点击"Create access token"
 6. **重要**：复制生成的Token（只会显示一次）
+
+**注意**：这个Token是针对具体项目仓库的，每个项目都需要单独配置Token。
 
 #### 3. 添加GitLab项目
 1. 进入应用后，点击左侧菜单的"设置"
@@ -225,9 +226,9 @@ npm run build
    - **拉取记录上限**：设置从GitLab拉取的提交数量上限
 
 ### 3. GitLab Token 配置
-1. 登录GitLab
-2. 进入 Settings → Access Tokens
-3. 创建Personal Access Token，需要以下权限：
+1. 登录GitLab，进入要配置的项目仓库
+2. 进入 Settings → Access Tokens（或 Settings → Repository → Deploy tokens）
+3. 创建项目级别的Access Token，需要以下权限：
    - `read_api`
    - `read_repository`
    - `read_user`
