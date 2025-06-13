@@ -39,6 +39,7 @@ interface GitLabProject {
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   reviewDays?: number; // 审核范围（天数），默认7天
   maxCommits?: number; // 拉取记录上限，默认100条
+  filterRules?: string; // 过滤规则（正则表达式），匹配到的commit无需审查
   createdAt: string;
 }
 
@@ -223,6 +224,28 @@ const Settings: React.FC = () => {
       },
     },
     {
+      title: '过滤规则',
+      dataIndex: 'filterRules',
+      key: 'filterRules',
+      width: 100,
+      render: (filterRules: string) => {
+        if (!filterRules || filterRules.trim() === '') {
+          return <Text type="secondary">未配置</Text>;
+        }
+        
+        const ruleCount = filterRules
+          .split('\n')
+          .map(rule => rule.trim())
+          .filter(rule => rule.length > 0).length;
+          
+        return (
+          <Tag color="green">
+            {ruleCount} 条规则
+          </Tag>
+        );
+      },
+    },
+    {
       title: '描述',
       dataIndex: 'description',
       key: 'description',
@@ -393,6 +416,17 @@ const Settings: React.FC = () => {
               suffix="条"
               placeholder="请输入记录数"
               style={{ width: '200px' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="过滤规则"
+            name="filterRules"
+            help="输入正则表达式匹配commit log，匹配到的commit无需审查（每行一个规则）"
+          >
+            <Input.TextArea 
+              rows={4} 
+              placeholder="例如：&#10;^(build|ci|docs|feat|fix|perf|refactor|style|test).*&#10;^Merge branch.*&#10;^Update.*"
             />
           </Form.Item>
 

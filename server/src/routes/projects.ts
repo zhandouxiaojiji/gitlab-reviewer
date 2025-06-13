@@ -1,14 +1,10 @@
 import express from 'express';
 import { Response, NextFunction } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { projectStorage } from '../utils/storage';
 import { GitlabUserService } from '../services/gitlabUserService';
 import axios from 'axios';
-
-// 定义AuthRequest接口
-interface AuthRequest extends express.Request {
-  user?: any;
-}
+import { validateFilterRules } from '../utils/filterUtils';
 
 const router = express.Router();
 
@@ -29,7 +25,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 创建新项目
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
@@ -66,6 +62,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       reviewers: reviewers || [],
       reviewDays: reviewDays || 7, // 审核范围默认7天
       maxCommits: maxCommits || 100, // 拉取记录上限默认100条
+      filterRules: filterRules || '', // 过滤规则
       isActive: true,
       createdBy: req.user.id
     });
@@ -90,20 +87,21 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 更新项目
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits } = req.body;
-    const projectId = req.params.id;
-
-    const existingProject = projectStorage.findById(projectId);
-    if (!existingProject) {
-      return res.status(404).json({ message: '项目不存在' });
-    }
+    const { id: projectId } = req.params;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
     }
 
-    // 生成新的项目ID
+    // 检查项目是否存在
+    const existingProject = projectStorage.findById(projectId);
+    if (!existingProject || existingProject.isActive === false) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 生成新的项目ID（用于检查是否需要重新创建）
     const generateProjectId = (gitlabUrl: string, projectName: string) => {
       const cleanUrl = gitlabUrl
         .replace(/^https?:\/\//, '')
@@ -136,6 +134,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         reviewers: reviewers || existingProject.reviewers || [],
         reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
         maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
+        filterRules: filterRules !== undefined ? filterRules : (existingProject.filterRules || ''),
         userMappings: existingProject.userMappings || {},
         isActive: true,
         createdBy: existingProject.createdBy,
@@ -166,6 +165,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         reviewers: reviewers || [],
         reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
         maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
+        filterRules: filterRules !== undefined ? filterRules : (existingProject.filterRules || ''),
         updatedAt: new Date().toISOString()
       });
 
@@ -764,6 +764,23 @@ router.post('/cleanup-duplicate-mappings', authenticateToken, async (req: AuthRe
     });
   } catch (error) {
     console.error('清理重复映射关系错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+});
+
+// 验证过滤规则
+router.post('/validate-filter-rules', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { filterRules } = req.body;
+    
+    const validation = validateFilterRules(filterRules);
+    
+    res.json({
+      valid: validation.valid,
+      errors: validation.errors
+    });
+  } catch (error) {
+    console.error('验证过滤规则错误:', error);
     res.status(500).json({ message: '服务器内部错误' });
   }
 });

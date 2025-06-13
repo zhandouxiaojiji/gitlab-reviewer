@@ -4,6 +4,7 @@
 1.前端有一个记录每一次提交是否有review，被谁review的，是否review的依据是gitlab上的commit是否有评论。
 2.后端需要配置gitlab的相关配置
 3.支持多个项目的配置
+4.项目不使用数据库，只使用json文件来存储数据，保存路径在server/data目录下，projects.json是项目的配置信息。
 
 这是本项目所采用的技术栈:
 1.前端使用 react + ant design pro

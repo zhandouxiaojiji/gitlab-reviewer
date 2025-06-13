@@ -42,6 +42,7 @@ interface CommitReview {
   allReviewers?: string[]; // 所有参与评论的审核人员
   reviewComments: number;
   gitlabUrl?: string;
+  skip_review?: boolean; // 是否符合过滤规则（无需审查）
   key?: string;
 }
 
@@ -193,6 +194,7 @@ const ProjectDetail: React.FC = () => {
           allReviewers: uniqueReviewers, // 所有参与评论的人员
           reviewComments: commit.comments_count || 0,
           gitlabUrl: commit.web_url,
+          skip_review: commit.skip_review,
           key: commit.id
         };
       });
@@ -305,7 +307,17 @@ const ProjectDetail: React.FC = () => {
   const renderCommitItem = (commit: CommitReview) => {
     // 计算审查状态
     const getReviewStatus = () => {
-      // 首先检查：如果当前登录用户查看自己的提交，显示"本人提交"
+      // 首先检查：如果匹配过滤规则，显示"无需审查"
+      if (commit.skip_review) {
+        return { 
+          status: 'filtered', 
+          text: '无需审查', 
+          color: 'default',
+          icon: <CheckCircleOutlined />
+        };
+      }
+      
+      // 然后检查：如果当前登录用户查看自己的提交，显示"本人提交"
       if (commit.author === username || 
           (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
           (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author)) {
@@ -542,7 +554,7 @@ const ProjectDetail: React.FC = () => {
   const calculateReviewStats = () => {
     if (!project.reviewers || project.reviewers.length === 0) {
       // 如果没有配置审核人员，使用原来的逻辑
-      const reviewedCount = commits.filter(c => c.hasReview).length;
+      const reviewedCount = commits.filter(c => c.hasReview || c.skip_review).length;
       const totalCount = commits.length;
       const reviewRate = totalCount > 0 ? ((reviewedCount / totalCount) * 100).toFixed(1) : '0';
       return { reviewedCount, totalCount, reviewRate };
@@ -553,7 +565,13 @@ const ProjectDetail: React.FC = () => {
     const totalCount = commits.length;
 
     commits.forEach(commit => {
-      // 首先检查：如果是当前用户自己的提交，算作无需审核（已完成）
+      // 首先检查：如果符合过滤规则，算作无需审核（已完成）
+      if (commit.skip_review) {
+        reviewedCount++;
+        return;
+      }
+      
+      // 然后检查：如果是当前用户自己的提交，算作无需审核（已完成）
       if (commit.author === username || 
           (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
           (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author)) {

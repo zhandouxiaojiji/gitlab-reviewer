@@ -3,6 +3,7 @@ import { Request } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { storage } from '../utils/storage';
 import axios from 'axios';
+import { shouldSkipReview } from '../utils/filterUtils';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ interface Project {
   userMappings?: Record<string, string>;
   reviewDays?: number;
   maxCommits?: number;
+  filterRules?: string;
 }
 
 interface GitLabBranch {
@@ -241,6 +243,9 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
           const comments = commentsResponse.data;
           
           console.log(`提交 ${commit.short_id} 的评论数据:`, JSON.stringify(comments, null, 2));
+
+          // 检查是否符合过滤规则（无需审查）
+          const skipReview = shouldSkipReview(commit.message || '', project.filterRules || '');
           
           return {
             id: commit.id,
@@ -252,6 +257,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
             web_url: commit.web_url,
             has_comments: comments.length > 0,
             comments_count: comments.length,
+            skip_review: skipReview, // 添加过滤标记
             comments: comments.map((comment: any) => {
               console.log(`处理评论作者信息:`, comment.author);
               return {
@@ -263,6 +269,10 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
           };
         } catch (error) {
           console.warn(`获取提交 ${commit.id} 的评论失败:`, error instanceof Error ? error.message : error);
+          
+          // 即使获取评论失败，也要检查过滤规则
+          const skipReview = shouldSkipReview(commit.message || '', project.filterRules || '');
+          
           return {
             id: commit.id,
             short_id: commit.short_id,
@@ -273,6 +283,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
             web_url: commit.web_url,
             has_comments: false,
             comments_count: 0,
+            skip_review: skipReview, // 添加过滤标记
             comments: []
           };
         }
