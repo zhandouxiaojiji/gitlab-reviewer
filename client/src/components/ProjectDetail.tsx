@@ -303,6 +303,19 @@ const ProjectDetail: React.FC = () => {
     message.success('提交ID已复制到剪贴板');
   };
 
+  // 跳转到GitLab commit页面
+  const openGitLabCommit = (commit: CommitReview, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    if (project) {
+      const gitlabCommitUrl = `${project.gitlabUrl}/${project.name}/-/commit/${commit.fullCommitId}`;
+      window.open(gitlabCommitUrl, '_blank');
+    }
+  };
+
   // 删除原来的 columns 定义，替换为列表渲染函数
   const renderCommitItem = (commit: CommitReview) => {
     // 计算审查状态
@@ -380,6 +393,7 @@ const ProjectDetail: React.FC = () => {
     return (
     <div
       className="commit-item"
+      onClick={() => openGitLabCommit(commit)}
       style={{
         padding: '16px',
         margin: '8px 0',
@@ -389,7 +403,8 @@ const ProjectDetail: React.FC = () => {
         transition: 'all 0.3s',
         display: 'flex',
         alignItems: 'flex-start',
-        gap: '12px'
+        gap: '12px',
+        cursor: 'pointer'
       }}
     >
       {/* 左侧图标 */}
@@ -480,7 +495,10 @@ const ProjectDetail: React.FC = () => {
               type="link"
               size="small"
               icon={<CopyOutlined />}
-              onClick={() => copyCommitId(commit.fullCommitId)}
+              onClick={(e) => {
+                e.stopPropagation();
+                copyCommitId(commit.fullCommitId);
+              }}
               style={{ padding: '0', height: 'auto' }}
             >
               复制
@@ -530,12 +548,7 @@ const ProjectDetail: React.FC = () => {
               type="primary"
               size="small"
               icon={<LinkOutlined />}
-              onClick={() => {
-                if (project) {
-                  const gitlabCommitUrl = `${project.gitlabUrl}/${project.name}/-/commit/${commit.fullCommitId}`;
-                  window.open(gitlabCommitUrl, '_blank');
-                }
-              }}
+              onClick={(e) => openGitLabCommit(commit, e)}
             >
               查看
             </Button>
@@ -606,7 +619,15 @@ const ProjectDetail: React.FC = () => {
         {`
           .commit-item:hover {
             border-color: #1890ff !important;
-            box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2) !important;
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15) !important;
+            transform: translateY(-2px) !important;
+          }
+          .commit-item {
+            transition: all 0.3s ease !important;
+          }
+          .commit-item:active {
+            transform: translateY(0px) !important;
+            box-shadow: 0 2px 6px rgba(24, 144, 255, 0.2) !important;
           }
           .ant-list-item {
             border: none !important;
