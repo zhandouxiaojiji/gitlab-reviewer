@@ -274,7 +274,7 @@ class SchedulerService {
   // 拉取所有项目的commit
   private async pullAllProjectsCommits() {
     try {
-      const projects = projectStorage.findAll().filter(p => p.isActive !== false);
+      const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
       console.log(`开始拉取 ${projects.length} 个项目的commit...`);
       
       for (const project of projects) {
@@ -288,7 +288,7 @@ class SchedulerService {
   // 拉取所有项目的评论
   private async pullAllProjectsComments() {
     try {
-      const projects = projectStorage.findAll().filter(p => p.isActive !== false);
+      const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
       
       for (const project of projects) {
         await this.pullCommitComments(project);
