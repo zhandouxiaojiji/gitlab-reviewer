@@ -23,7 +23,6 @@ interface GitLabProject {
   reviewers?: string[]; // 审核人员用户名列表
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   reviewDays?: number; // 审核范围（天数），默认7天
-  maxCommits?: number; // 拉取记录上限，默认100条
   refreshInterval?: number; // 刷新频率（分钟），默认1分钟
   createdAt: string;
 }
@@ -195,6 +194,13 @@ const ProjectDetail: React.FC = () => {
           skip_review: commit.skip_review,
           key: commit.id
         };
+      });
+      
+      // 按提交时间从新到旧排序
+      formattedCommits.sort((a: CommitReview, b: CommitReview) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateB - dateA; // 从新到旧排序
       });
       
       setCommits(formattedCommits);

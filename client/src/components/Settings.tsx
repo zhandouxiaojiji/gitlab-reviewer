@@ -38,7 +38,6 @@ interface GitLabProject {
   reviewers?: string[]; // 审核人员用户名列表
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   reviewDays?: number; // 审核范围（天数），默认7天
-  maxCommits?: number; // 拉取记录上限，默认100条
   filterRules?: string; // 过滤规则（正则表达式），匹配到的commit无需审查
   refreshInterval?: number; // 刷新频率（分钟），默认1分钟
   createdAt: string;
@@ -107,7 +106,6 @@ const Settings: React.FC = () => {
       ...project,
       reviewers: project.reviewers || [],
       reviewDays: project.reviewDays || 7,
-      maxCommits: project.maxCommits || 100,
       refreshInterval: project.refreshInterval || 1
     });
     // 加载项目用户列表
@@ -205,10 +203,6 @@ const Settings: React.FC = () => {
           <div style={{ marginBottom: '4px' }}>
             <Text strong>审核范围: </Text>
             <Tag color="blue">{record.reviewDays || 7} 天</Tag>
-          </div>
-          <div style={{ marginBottom: '4px' }}>
-            <Text strong>拉取上限: </Text>
-            <Tag color="green">{record.maxCommits || 100} 条</Tag>
           </div>
           <div style={{ marginBottom: '4px' }}>
             <Text strong>刷新频率: </Text>
@@ -378,22 +372,6 @@ const Settings: React.FC = () => {
               max={365}
               suffix="天"
               placeholder="请输入天数"
-              style={{ width: '200px' }}
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="拉取记录上限"
-            name="maxCommits"
-            help="从GitLab拉取的提交记录数量上限，默认100条"
-            initialValue={100}
-          >
-            <Input
-              type="number"
-              min={10}
-              max={1000}
-              suffix="条"
-              placeholder="请输入记录数"
               style={{ width: '200px' }}
             />
           </Form.Item>
