@@ -103,23 +103,33 @@ class SchedulerService {
       console.log(`开始拉取项目 ${project.name} 的新commit...`);
       
       const projectData = this.readProjectCommitData(project.id);
-      const since = projectData.lastCommitPullTime;
+      
+      // 获取项目的默认分支
+      const branchData = this.readProjectBranchData(project.id);
+      const defaultBranch = branchData.defaultBranch || 'main';
       
       // 构建GitLab API URL
       const cleanGitlabUrl = project.gitlabUrl.replace(/\/$/, '');
       const projectIdentifier = encodeURIComponent(project.name);
       const commitsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits`;
       
+      // 构建请求参数
+      const params: any = {
+        per_page: 100,
+        ref_name: defaultBranch // 使用项目的默认分支
+      };
+      
+      // 只有在已经有commit数据时才使用since参数，避免首次拉取时过滤掉历史commit
+      if (projectData.commits.length > 0) {
+        params.since = projectData.lastCommitPullTime;
+      }
+      
       const response = await axios.get(commitsUrl, {
         headers: {
           'Authorization': `Bearer ${project.accessToken}`,
           'Accept': 'application/json'
         },
-        params: {
-          since: since,
-          per_page: 100,
-          ref_name: 'main' // 可以根据需要调整分支
-        },
+        params,
         timeout: 10000
       });
 
