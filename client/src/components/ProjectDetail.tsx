@@ -149,16 +149,19 @@ const ProjectDetail: React.FC = () => {
     try {
       setLoading(true);
       
-      // 使用选中的分支获取提交记录
+      // 使用选中的分支获取提交记录，添加all=true参数获取所有commit
       const response = await api.get(`/api/gitlab/projects/${project.id}/commits`, {
         params: {
-          branch: selectedBranch
+          branch: selectedBranch,
+          all: 'true' // 获取所有commit，不分页
         }
       });
       
       // 后端返回的数据结构是 { commits: [], userMappings: {}, ... }
       const responseData = response.data || {};
       const commitsData = Array.isArray(responseData.commits) ? responseData.commits : [];
+      
+      console.log(`获取到 ${commitsData.length} 个commit记录`);
       
       // 更新用户映射关系
       if (responseData.userMappings) {

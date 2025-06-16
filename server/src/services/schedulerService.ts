@@ -138,35 +138,69 @@ class SchedulerService {
       const projectIdentifier = encodeURIComponent(project.name);
       const commitsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits`;
       
-      // 构建请求参数
-      const params: any = {
-        per_page: 100,
-        ref_name: defaultBranch // 使用项目的默认分支
-      };
-      
       // 使用本地最新commit的时间作为拉取起始点
       const latestCommitTime = this.getLatestCommitTime(projectData.commits);
-      if (latestCommitTime) {
-        params.since = latestCommitTime;
-        console.log(`从最新commit时间开始拉取: ${latestCommitTime}`);
-      } else {
-        console.log('首次拉取，获取最近100个commit');
-      }
       
-      const response = await axios.get(commitsUrl, {
-        headers: {
-          'Authorization': `Bearer ${project.accessToken}`,
-          'Accept': 'application/json'
-        },
-        params,
-        timeout: 10000
-      });
+      let allNewCommits: any[] = [];
+      let page = 1;
+      const perPage = 100; // 每页100条
+      let hasMorePages = true;
+      
+      console.log(latestCommitTime ? `从最新commit时间开始拉取: ${latestCommitTime}` : '首次拉取，获取所有commit');
+      
+      // 循环拉取所有页面的数据
+      while (hasMorePages) {
+        try {
+          // 构建请求参数
+          const params: any = {
+            per_page: perPage,
+            page: page,
+            ref_name: defaultBranch // 使用项目的默认分支
+          };
+          
+          // 使用本地最新commit的时间作为拉取起始点
+          if (latestCommitTime) {
+            params.since = latestCommitTime;
+          }
+          
+          console.log(`拉取第 ${page} 页数据...`);
+          
+          const response = await axios.get(commitsUrl, {
+            headers: {
+              'Authorization': `Bearer ${project.accessToken}`,
+              'Accept': 'application/json'
+            },
+            params,
+            timeout: 15000 // 增加超时时间
+          });
 
-      const newCommits = response.data;
-      console.log(`项目 ${project.name} 拉取到 ${newCommits.length} 个新commit`);
+          const pageCommits = response.data;
+          console.log(`第 ${page} 页拉取到 ${pageCommits.length} 个commit`);
+          
+          if (pageCommits.length === 0) {
+            // 没有更多数据了
+            hasMorePages = false;
+          } else {
+            allNewCommits = allNewCommits.concat(pageCommits);
+            
+            // 如果返回的数据少于每页数量，说明这是最后一页
+            if (pageCommits.length < perPage) {
+              hasMorePages = false;
+            } else {
+              page++;
+            }
+          }
+        } catch (error) {
+          console.error(`拉取第 ${page} 页数据失败:`, error);
+          hasMorePages = false;
+        }
+      }
+
+      console.log(`项目 ${project.name} 总共拉取到 ${allNewCommits.length} 个commit`);
 
       // 处理新commit
-      for (const commit of newCommits) {
+      let newCommitCount = 0;
+      for (const commit of allNewCommits) {
         const existingCommitIndex = projectData.commits.findIndex(c => c.id === commit.id);
         
         if (existingCommitIndex === -1) {
@@ -188,13 +222,14 @@ class SchedulerService {
           };
           
           projectData.commits.unshift(newCommitData); // 新commit放在前面
+          newCommitCount++;
         }
       }
 
-      // 保存数据（不再需要更新lastCommitPullTime）
+      // 保存数据
       this.saveProjectCommitData(projectData);
       
-      console.log(`项目 ${project.name} commit拉取完成`);
+      console.log(`项目 ${project.name} commit拉取完成，新增 ${newCommitCount} 个commit，总计 ${projectData.commits.length} 个commit`);
     } catch (error) {
       console.error(`拉取项目 ${project.name} 的commit失败:`, error);
     }

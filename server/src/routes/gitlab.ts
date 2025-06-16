@@ -45,9 +45,9 @@ interface GitLabBranch {
 router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId } = req.params;
-    const { page = '1', per_page = '20', branch = 'main' } = req.query;
+    const { page = '1', per_page = '20', branch = 'main', all = 'false' } = req.query;
 
-    console.log(`获取项目 ${projectId} 的提交记录，分支: ${branch}`);
+    console.log(`获取项目 ${projectId} 的提交记录，分支: ${branch}，获取全部: ${all}`);
 
     // 获取项目信息
     const project = projectStorage.findById(projectId);
@@ -60,15 +60,11 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
     
     console.log(`从本地文件读取到 ${commits.length} 个提交记录`);
 
-    // 分页处理
-    const pageNum = parseInt(page.toString());
-    const perPage = parseInt(per_page.toString());
-    const startIndex = (pageNum - 1) * perPage;
-    const endIndex = startIndex + perPage;
-    const paginatedCommits = commits.slice(startIndex, endIndex);
+    let formattedCommits;
+    let responseData;
 
     // 转换数据格式以匹配前端期望的格式
-    const formattedCommits = paginatedCommits.map(commit => {
+    const formatCommit = (commit: any) => {
       // 检查是否符合过滤规则（无需审查）
       const skipReview = shouldSkipReview(commit.message || '', project.filterRules || '');
       
@@ -85,18 +81,39 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
         skip_review: skipReview, // 添加过滤标记
         comments: commit.comments
       };
-    });
+    };
 
-    const totalPages = Math.ceil(commits.length / perPage);
+    if (all === 'true') {
+      // 返回所有commit，不分页
+      formattedCommits = commits.map(formatCommit);
+      responseData = {
+        commits: formattedCommits,
+        total: commits.length,
+        message: commits.length === 0 ? '暂无提交记录，请等待定时拉取或手动刷新' : undefined
+      };
+    } else {
+      // 分页处理
+      const pageNum = parseInt(page.toString());
+      const perPage = parseInt(per_page.toString());
+      const startIndex = (pageNum - 1) * perPage;
+      const endIndex = startIndex + perPage;
+      const paginatedCommits = commits.slice(startIndex, endIndex);
 
-    res.json({
-      commits: formattedCommits,
-      total: commits.length,
-      total_pages: totalPages,
-      current_page: pageNum,
-      per_page: perPage,
-      message: commits.length === 0 ? '暂无提交记录，请等待定时拉取或手动刷新' : undefined
-    });
+      formattedCommits = paginatedCommits.map(formatCommit);
+
+      const totalPages = Math.ceil(commits.length / perPage);
+
+      responseData = {
+        commits: formattedCommits,
+        total: commits.length,
+        total_pages: totalPages,
+        current_page: pageNum,
+        per_page: perPage,
+        message: commits.length === 0 ? '暂无提交记录，请等待定时拉取或手动刷新' : undefined
+      };
+    }
+
+    res.json(responseData);
 
   } catch (error: any) {
     console.error('获取提交记录失败:', error);
