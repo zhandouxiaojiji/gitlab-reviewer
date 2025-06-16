@@ -22,7 +22,6 @@ interface CommitData {
 
 interface ProjectCommitData {
   projectId: string;
-  lastCommitPullTime: string;
   lastCommentPullTime: string;
   commits: CommitData[];
 }
@@ -77,7 +76,20 @@ class SchedulerService {
     try {
       if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(data);
+        const parsedData = JSON.parse(data);
+        
+        // 向后兼容：移除旧的lastCommitPullTime字段
+        if ('lastCommitPullTime' in parsedData) {
+          delete parsedData.lastCommitPullTime;
+          console.log(`移除项目 ${projectId} 数据中的lastCommitPullTime字段`);
+        }
+        
+        // 确保数据结构正确
+        return {
+          projectId: parsedData.projectId || projectId,
+          lastCommentPullTime: parsedData.lastCommentPullTime || new Date().toISOString(),
+          commits: parsedData.commits || []
+        };
       }
     } catch (error) {
       console.error(`读取项目 ${projectId} 的commit数据失败:`, error);
@@ -85,7 +97,6 @@ class SchedulerService {
     
     return {
       projectId,
-      lastCommitPullTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 默认7天前
       lastCommentPullTime: new Date().toISOString(),
       commits: []
     };
@@ -99,6 +110,16 @@ class SchedulerService {
     } catch (error) {
       console.error(`保存项目 ${data.projectId} 的commit数据失败:`, error);
     }
+  }
+
+  // 获取本地最新commit的时间，用于确定拉取起始点
+  private getLatestCommitTime(commits: CommitData[]): string | null {
+    if (commits.length === 0) {
+      return null;
+    }
+    
+    // commits数组已经按时间排序（最新的在前面），直接取第一个
+    return commits[0].committed_date;
   }
 
   // 拉取项目的新commit
@@ -123,9 +144,13 @@ class SchedulerService {
         ref_name: defaultBranch // 使用项目的默认分支
       };
       
-      // 只有在已经有commit数据时才使用since参数，避免首次拉取时过滤掉历史commit
-      if (projectData.commits.length > 0) {
-        params.since = projectData.lastCommitPullTime;
+      // 使用本地最新commit的时间作为拉取起始点
+      const latestCommitTime = this.getLatestCommitTime(projectData.commits);
+      if (latestCommitTime) {
+        params.since = latestCommitTime;
+        console.log(`从最新commit时间开始拉取: ${latestCommitTime}`);
+      } else {
+        console.log('首次拉取，获取最近100个commit');
       }
       
       const response = await axios.get(commitsUrl, {
@@ -166,10 +191,7 @@ class SchedulerService {
         }
       }
 
-      // 更新最后拉取时间
-      projectData.lastCommitPullTime = new Date().toISOString();
-      
-      // 保存数据
+      // 保存数据（不再需要更新lastCommitPullTime）
       this.saveProjectCommitData(projectData);
       
       console.log(`项目 ${project.name} commit拉取完成`);
