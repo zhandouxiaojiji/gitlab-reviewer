@@ -30,7 +30,7 @@ export function shouldSkipReview(commitMessage: string, filterRules: string): bo
     try {
       const regex = new RegExp(rule, 'i'); // 忽略大小写
       if (regex.test(commitMessage)) {
-        console.log(`Commit "${commitMessage}" 匹配过滤规则: ${rule}`);
+        // console.log(`Commit "${commitMessage}" 匹配过滤规则: ${rule}`);
         return true;
       }
     } catch (error) {

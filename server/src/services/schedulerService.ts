@@ -81,7 +81,7 @@ class SchedulerService {
         // 向后兼容：移除旧的lastCommitPullTime字段
         if ('lastCommitPullTime' in parsedData) {
           delete parsedData.lastCommitPullTime;
-          console.log(`移除项目 ${projectId} 数据中的lastCommitPullTime字段`);
+          console.log(`清理项目 ${projectId} 旧数据字段`);
         }
         
         // 确保数据结构正确
@@ -119,14 +119,17 @@ class SchedulerService {
     }
     
     // commits数组已经按时间排序（最新的在前面），直接取第一个
-    return commits[0].committed_date;
+    const latestCommitDate = new Date(commits[0].committed_date);
+    
+    // 在最新commit时间基础上加1秒，避免重复拉取同一个commit
+    latestCommitDate.setSeconds(latestCommitDate.getSeconds() + 1);
+    
+    return latestCommitDate.toISOString();
   }
 
   // 拉取项目的新commit
   private async pullProjectCommits(project: any): Promise<void> {
     try {
-      console.log(`开始拉取项目 ${project.name} 的新commit...`);
-      
       const projectData = this.readProjectCommitData(project.id);
       
       // 获取项目的默认分支
@@ -141,12 +144,21 @@ class SchedulerService {
       // 使用本地最新commit的时间作为拉取起始点
       const latestCommitTime = this.getLatestCommitTime(projectData.commits);
       
+      // 显示本地最新commit信息
+      if (projectData.commits.length > 0) {
+        const latestCommit = projectData.commits[0];
+        console.log(`项目 ${project.name} 本地最新commit: ${latestCommit.short_id} - ${latestCommit.message} (${latestCommit.committed_date})`);
+        if (latestCommitTime) {
+          console.log(`项目 ${project.name} 将从时间 ${latestCommitTime} 开始拉取新commit`);
+        }
+      } else {
+        console.log(`项目 ${project.name} 本地暂无commit，将进行首次全量拉取`);
+      }
+      
       let allNewCommits: any[] = [];
       let page = 1;
       const perPage = 100; // 每页100条
       let hasMorePages = true;
-      
-      console.log(latestCommitTime ? `从最新commit时间开始拉取: ${latestCommitTime}` : '首次拉取，获取所有commit');
       
       // 循环拉取所有页面的数据
       while (hasMorePages) {
@@ -163,8 +175,6 @@ class SchedulerService {
             params.since = latestCommitTime;
           }
           
-          console.log(`拉取第 ${page} 页数据...`);
-          
           const response = await axios.get(commitsUrl, {
             headers: {
               'Authorization': `Bearer ${project.accessToken}`,
@@ -175,7 +185,6 @@ class SchedulerService {
           });
 
           const pageCommits = response.data;
-          console.log(`第 ${page} 页拉取到 ${pageCommits.length} 个commit`);
           
           if (pageCommits.length === 0) {
             // 没有更多数据了
@@ -191,12 +200,10 @@ class SchedulerService {
             }
           }
         } catch (error) {
-          console.error(`拉取第 ${page} 页数据失败:`, error);
+          console.error(`项目 ${project.name} 拉取第 ${page} 页数据失败:`, error);
           hasMorePages = false;
         }
       }
-
-      console.log(`项目 ${project.name} 总共拉取到 ${allNewCommits.length} 个commit`);
 
       // 处理新commit
       let newCommitCount = 0;
@@ -229,29 +236,31 @@ class SchedulerService {
       // 保存数据
       this.saveProjectCommitData(projectData);
       
-      console.log(`项目 ${project.name} commit拉取完成，新增 ${newCommitCount} 个commit，总计 ${projectData.commits.length} 个commit`);
+      console.log(`项目 ${project.name} commit拉取完成: 新增 ${newCommitCount} 个，总计 ${projectData.commits.length} 个`);
     } catch (error) {
-      console.error(`拉取项目 ${project.name} 的commit失败:`, error);
+      console.error(`项目 ${project.name} commit拉取失败:`, error);
     }
   }
 
   // 拉取commit的评论
   private async pullCommitComments(project: any): Promise<void> {
     try {
-      console.log(`开始拉取项目 ${project.name} 的commit评论...`);
-      
       const projectData = this.readProjectCommitData(project.id);
       const cleanGitlabUrl = project.gitlabUrl.replace(/\/$/, '');
       const projectIdentifier = encodeURIComponent(project.name);
       
       let updatedCount = 0;
+      const needsReviewCommits = projectData.commits.filter(commit => commit.needsReview);
+      
+      if (needsReviewCommits.length === 0) {
+        console.log(`项目 ${project.name} 无需拉取评论的commit`);
+        return;
+      }
+      
+      console.log(`项目 ${project.name} 开始拉取 ${needsReviewCommits.length} 个commit的评论`);
       
       // 只拉取需要审核的commit的评论
-      for (const commit of projectData.commits) {
-        if (!commit.needsReview) {
-          continue; // 跳过不需要审核的commit
-        }
-        
+      for (const commit of needsReviewCommits) {
         try {
           const commentsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits/${commit.id}/comments`;
           const commentsResponse = await axios.get(commentsUrl, {
@@ -302,9 +311,9 @@ class SchedulerService {
       // 保存数据
       this.saveProjectCommitData(projectData);
       
-      console.log(`项目 ${project.name} 评论拉取完成，更新了 ${updatedCount} 个commit的评论`);
+      console.log(`项目 ${project.name} 评论拉取完成: 更新 ${updatedCount} 个commit`);
     } catch (error) {
-      console.error(`拉取项目 ${project.name} 的评论失败:`, error);
+      console.error(`项目 ${project.name} 评论拉取失败:`, error);
     }
   }
 
@@ -372,7 +381,6 @@ class SchedulerService {
   private async pullAllProjectsCommits() {
     try {
       const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
-      console.log(`开始拉取 ${projects.length} 个项目的commit...`);
       
       for (const project of projects) {
         await this.pullProjectCommits(project);
@@ -470,8 +478,6 @@ class SchedulerService {
   // 拉取项目的分支信息
   private async pullProjectBranches(project: any): Promise<void> {
     try {
-      console.log(`开始拉取项目 ${project.name} 的分支信息...`);
-      
       // 构建GitLab API URL
       const cleanGitlabUrl = project.gitlabUrl.replace(/\/$/, '');
       const projectIdentifier = encodeURIComponent(project.name);
@@ -486,7 +492,6 @@ class SchedulerService {
       });
 
       const branches = response.data;
-      console.log(`项目 ${project.name} 拉取到 ${branches.length} 个分支`);
 
       // 处理分支数据
       const branchData: BranchData[] = branches.map((branch: any) => ({
@@ -528,9 +533,9 @@ class SchedulerService {
 
       this.saveProjectBranchData(projectBranchData);
       
-      console.log(`项目 ${project.name} 分支信息拉取完成，默认分支: ${defaultBranch}`);
+      console.log(`项目 ${project.name} 分支拉取完成: ${branches.length} 个分支，默认分支 ${defaultBranch}`);
     } catch (error) {
-      console.error(`拉取项目 ${project.name} 的分支信息失败:`, error);
+      console.error(`项目 ${project.name} 分支拉取失败:`, error);
     }
   }
 
@@ -554,8 +559,6 @@ class SchedulerService {
   // 手动刷新所有数据（commit、评论、分支）
   public async manualRefreshAll(projectId?: string): Promise<void> {
     try {
-      console.log('开始手动刷新所有数据...');
-      
       if (projectId) {
         // 刷新指定项目
         const project = projectStorage.findById(projectId);
@@ -573,17 +576,15 @@ class SchedulerService {
       } else {
         // 刷新所有项目
         const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
-        console.log(`手动刷新 ${projects.length} 个项目的所有数据...`);
+        console.log(`手动刷新 ${projects.length} 个项目的所有数据`);
         
         for (const project of projects) {
           try {
-            console.log(`正在刷新项目: ${project.name}`);
             await Promise.all([
               this.pullProjectCommits(project),
               this.pullCommitComments(project),
               this.pullProjectBranches(project)
             ]);
-            console.log(`项目 ${project.name} 刷新完成`);
           } catch (error) {
             console.error(`项目 ${project.name} 刷新失败:`, error);
           }
