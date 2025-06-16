@@ -7,6 +7,7 @@ import projectRoutes from './routes/projects';
 import reviewRoutes from './routes/reviews';
 import gitlabRoutes from './routes/gitlab';
 import { GitlabUserService } from './services/gitlabUserService';
+import schedulerService from './services/schedulerService';
 
 dotenv.config();
 
@@ -25,28 +26,46 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/gitlab', gitlabRoutes);
 
-app.get('/api/health', (req, res) => {
-  res.json({ message: 'GitLab Review服务器运行正常', status: 'ok' });
+// 健康检查
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
-// 服务器启动时初始化用户映射关系
-const initializeUserMappings = async () => {
-  try {
-    console.log('正在初始化所有项目的用户映射关系...');
-    // 延迟5秒后开始，确保服务器完全启动
-    setTimeout(async () => {
-      await GitlabUserService.updateAllProjectUserMappings();
-      console.log('用户映射关系初始化完成');
-    }, 5000);
-  } catch (error) {
-    console.error('初始化用户映射关系失败:', error);
-  }
-};
+// 404处理
+app.use('*', (req, res) => {
+  res.status(404).json({ message: '接口不存在' });
+});
 
+// 错误处理中间件
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('服务器错误:', err);
+  res.status(500).json({ message: '服务器内部错误' });
+});
+
+// 启动服务器
 app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
-  console.log('使用任意用户名即可登录，系统会自动创建新用户');
+  console.log(`健康检查: http://localhost:${PORT}/health`);
   
-  // 启动用户映射关系初始化
-  initializeUserMappings();
+  // 启动定时任务
+  console.log('启动定时拉取服务...');
+  schedulerService.startCommitPulling();
+  schedulerService.startCommentPulling();
+});
+
+// 优雅关闭
+process.on('SIGTERM', () => {
+  console.log('收到SIGTERM信号，正在关闭服务器...');
+  schedulerService.stopAll();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('收到SIGINT信号，正在关闭服务器...');
+  schedulerService.stopAll();
+  process.exit(0);
 }); 
