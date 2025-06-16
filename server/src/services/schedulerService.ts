@@ -27,6 +27,26 @@ interface ProjectCommitData {
   commits: CommitData[];
 }
 
+interface BranchData {
+  name: string;
+  default: boolean;
+  protected: boolean;
+  merged: boolean;
+  commit: {
+    id: string;
+    short_id: string;
+    message: string;
+    committed_date: string;
+  };
+}
+
+interface ProjectBranchData {
+  projectId: string;
+  lastBranchPullTime: string;
+  branches: BranchData[];
+  defaultBranch: string;
+}
+
 class SchedulerService {
   private commitPullInterval: NodeJS.Timeout | null = null;
   private commentPullInterval: NodeJS.Timeout | null = null;
@@ -312,6 +332,125 @@ class SchedulerService {
     const project = projectStorage.findById(projectId);
     if (project) {
       await this.pullCommitComments(project);
+    }
+  }
+
+  // 获取项目的分支数据文件路径
+  private getBranchDataPath(projectId: string): string {
+    return path.join(this.DATA_DIR, `branches_${projectId.replace(/[^a-zA-Z0-9]/g, '_')}.json`);
+  }
+
+  // 读取项目的分支数据
+  private readProjectBranchData(projectId: string): ProjectBranchData {
+    const filePath = this.getBranchDataPath(projectId);
+    try {
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(data);
+      }
+    } catch (error) {
+      console.error(`读取项目 ${projectId} 的分支数据失败:`, error);
+    }
+    
+    return {
+      projectId,
+      lastBranchPullTime: new Date().toISOString(),
+      branches: [],
+      defaultBranch: 'main'
+    };
+  }
+
+  // 保存项目的分支数据
+  private saveProjectBranchData(data: ProjectBranchData) {
+    const filePath = this.getBranchDataPath(data.projectId);
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (error) {
+      console.error(`保存项目 ${data.projectId} 的分支数据失败:`, error);
+    }
+  }
+
+  // 拉取项目的分支信息
+  private async pullProjectBranches(project: any): Promise<void> {
+    try {
+      console.log(`开始拉取项目 ${project.name} 的分支信息...`);
+      
+      // 构建GitLab API URL
+      const cleanGitlabUrl = project.gitlabUrl.replace(/\/$/, '');
+      const projectIdentifier = encodeURIComponent(project.name);
+      const branchesUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/branches`;
+      
+      const response = await axios.get(branchesUrl, {
+        headers: {
+          'Authorization': `Bearer ${project.accessToken}`,
+          'Accept': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      const branches = response.data;
+      console.log(`项目 ${project.name} 拉取到 ${branches.length} 个分支`);
+
+      // 处理分支数据
+      const branchData: BranchData[] = branches.map((branch: any) => ({
+        name: branch.name,
+        default: branch.default || false,
+        protected: branch.protected || false,
+        merged: branch.merged || false,
+        commit: {
+          id: branch.commit?.id || '',
+          short_id: branch.commit?.short_id || '',
+          message: branch.commit?.message || '',
+          committed_date: branch.commit?.committed_date || new Date().toISOString()
+        }
+      }));
+
+      // 确定默认分支
+      let defaultBranch = 'main';
+      const defaultBranchObj = branchData.find(b => b.default);
+      if (defaultBranchObj) {
+        defaultBranch = defaultBranchObj.name;
+      } else {
+        // 查找常见的默认分支名称
+        const commonDefaultBranches = ['main', 'master', 'develop', 'dev'];
+        for (const commonBranch of commonDefaultBranches) {
+          if (branchData.find(b => b.name === commonBranch)) {
+            defaultBranch = commonBranch;
+            break;
+          }
+        }
+      }
+
+      // 保存分支数据
+      const projectBranchData: ProjectBranchData = {
+        projectId: project.id,
+        lastBranchPullTime: new Date().toISOString(),
+        branches: branchData,
+        defaultBranch: defaultBranch
+      };
+
+      this.saveProjectBranchData(projectBranchData);
+      
+      console.log(`项目 ${project.name} 分支信息拉取完成，默认分支: ${defaultBranch}`);
+    } catch (error) {
+      console.error(`拉取项目 ${project.name} 的分支信息失败:`, error);
+    }
+  }
+
+  // 获取项目的分支数据（供API使用）
+  public getProjectBranches(projectId: string): { branches: BranchData[], defaultBranch: string } {
+    const branchData = this.readProjectBranchData(projectId);
+    return {
+      branches: branchData.branches,
+      defaultBranch: branchData.defaultBranch
+    };
+  }
+
+  // 手动触发项目的分支拉取
+  public async manualPullBranches(projectId: string): Promise<void> {
+    const project = projectStorage.findById(projectId);
+    if (project) {
+      await this.pullProjectBranches(project);
     }
   }
 }

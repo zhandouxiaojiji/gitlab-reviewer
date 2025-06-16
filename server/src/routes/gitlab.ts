@@ -124,10 +124,11 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 手动触发commit和评论拉取
+    // 手动触发commit、评论和分支拉取
     await Promise.all([
       schedulerService.manualPullCommits(projectId),
-      schedulerService.manualPullComments(projectId)
+      schedulerService.manualPullComments(projectId),
+      schedulerService.manualPullBranches(projectId)
     ]);
 
     res.json({ 
@@ -169,7 +170,7 @@ router.get('/projects/:projectId/users/:username', authenticateToken, async (req
   }
 });
 
-// 获取项目分支列表（简化版本）
+// 获取项目分支列表（从本地文件读取）
 router.get('/projects/:projectId/branches', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId } = req.params;
@@ -179,43 +180,26 @@ router.get('/projects/:projectId/branches', authenticateToken, async (req: AuthR
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 返回默认分支列表
-    const branches = [
-      {
-        name: 'main',
-        default: true,
-        protected: true,
-        merged: false,
-        commit: {
-          id: 'main-branch',
-          short_id: 'main',
-          message: 'Main branch',
-          committed_date: new Date().toISOString()
-        }
-      },
-      {
-        name: 'develop',
-        default: false,
-        protected: false,
-        merged: false,
-        commit: {
-          id: 'develop-branch',
-          short_id: 'develop',
-          message: 'Develop branch',
-          committed_date: new Date().toISOString()
-        }
-      }
-    ];
+    // 从本地文件读取分支数据
+    const branchData = schedulerService.getProjectBranches(projectId);
+    
+    console.log(`从本地文件读取到项目 ${project.name} 的 ${branchData.branches.length} 个分支`);
 
     res.json({
-      branches: branches,
-      defaultBranch: 'main',
-      total: branches.length
+      branches: branchData.branches,
+      defaultBranch: branchData.defaultBranch,
+      total: branchData.branches.length,
+      message: branchData.branches.length === 0 ? '暂无分支信息，请点击刷新按钮拉取分支数据' : undefined
     });
 
   } catch (error: any) {
     console.error('获取分支列表失败:', error);
-    res.status(500).json({ message: '获取分支列表失败' });
+    res.status(500).json({ 
+      message: '获取分支列表失败: ' + (error.message || '未知错误'),
+      branches: [],
+      defaultBranch: 'main',
+      total: 0
+    });
   }
 });
 
