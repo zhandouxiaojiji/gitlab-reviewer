@@ -40,6 +40,7 @@ interface GitLabProject {
   reviewDays?: number; // 审核范围（天数），默认7天
   maxCommits?: number; // 拉取记录上限，默认100条
   filterRules?: string; // 过滤规则（正则表达式），匹配到的commit无需审查
+  refreshInterval?: number; // 刷新频率（分钟），默认1分钟
   createdAt: string;
 }
 
@@ -106,7 +107,8 @@ const Settings: React.FC = () => {
       ...project,
       reviewers: project.reviewers || [],
       reviewDays: project.reviewDays || 7,
-      maxCommits: project.maxCommits || 100
+      maxCommits: project.maxCommits || 100,
+      refreshInterval: project.refreshInterval || 1
     });
     // 加载项目用户列表
     loadProjectUsers(project);
@@ -171,84 +173,61 @@ const Settings: React.FC = () => {
 
   const columns = [
     {
-      title: '项目名称',
-      dataIndex: 'name',
-      key: 'name',
-      render: (text: string) => (
-        <Space>
-          <GitlabOutlined style={{ color: '#1890ff' }} />
-          <Text strong>{text}</Text>
-        </Space>
+      title: '项目信息',
+      key: 'info',
+      render: (_: any, record: GitLabProject) => (
+        <div>
+          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+            <GitlabOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+            {record.name}
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+            <LinkOutlined style={{ marginRight: '4px' }} />
+            {record.gitlabUrl}
+          </div>
+          <div style={{ fontSize: '12px', color: '#666' }}>
+            <KeyOutlined style={{ marginRight: '4px' }} />
+            Token: {record.accessToken ? '已配置' : '未配置'}
+          </div>
+          {record.description && (
+            <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+              {record.description}
+            </div>
+          )}
+        </div>
       ),
     },
     {
-      title: 'GitLab地址',
-      dataIndex: 'gitlabUrl',
-      key: 'gitlabUrl',
-      render: (text: string) => (
-        <Space>
-          <LinkOutlined />
-          <Text code>{text}</Text>
-        </Space>
+      title: '配置信息',
+      key: 'config',
+      render: (_: any, record: GitLabProject) => (
+        <div>
+          <div style={{ marginBottom: '4px' }}>
+            <Text strong>审核范围: </Text>
+            <Tag color="blue">{record.reviewDays || 7} 天</Tag>
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <Text strong>拉取上限: </Text>
+            <Tag color="green">{record.maxCommits || 100} 条</Tag>
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <Text strong>刷新频率: </Text>
+            <Tag color="orange">{record.refreshInterval || 1} 分钟</Tag>
+          </div>
+          <div>
+            <Text strong>审核人员: </Text>
+            {record.reviewers && record.reviewers.length > 0 ? (
+              record.reviewers.map(reviewer => (
+                <Tag key={reviewer} color="purple">
+                  {record.userMappings?.[reviewer] || reviewer}
+                </Tag>
+              ))
+            ) : (
+              <Tag color="default">未配置</Tag>
+            )}
+          </div>
+        </div>
       ),
-    },
-    {
-      title: 'Access Token',
-      dataIndex: 'accessToken',
-      key: 'accessToken',
-      render: (text: string) => (
-        <Space>
-          <KeyOutlined />
-          <Text code>{text ? '••••••••••••' + text.slice(-4) : ''}</Text>
-        </Space>
-      ),
-    },
-    {
-      title: '审核人员',
-      dataIndex: 'reviewers',
-      key: 'reviewers',
-      render: (reviewers: string[], record: GitLabProject) => {
-        if (!reviewers || reviewers.length === 0) {
-          return <Text type="secondary">未配置</Text>;
-        }
-        
-        return (
-          <Space wrap>
-            {reviewers.map(username => (
-              <Tag key={username} color="blue">
-                {record.userMappings?.[username] || username}
-              </Tag>
-            ))}
-          </Space>
-        );
-      },
-    },
-    {
-      title: '过滤规则',
-      dataIndex: 'filterRules',
-      key: 'filterRules',
-      width: 100,
-      render: (filterRules: string) => {
-        if (!filterRules || filterRules.trim() === '') {
-          return <Text type="secondary">未配置</Text>;
-        }
-        
-        const ruleCount = filterRules
-          .split('\n')
-          .map(rule => rule.trim())
-          .filter(rule => rule.length > 0).length;
-          
-        return (
-          <Tag color="green">
-            {ruleCount} 条规则
-          </Tag>
-        );
-      },
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
     },
     {
       title: '操作',
@@ -415,6 +394,22 @@ const Settings: React.FC = () => {
               max={1000}
               suffix="条"
               placeholder="请输入记录数"
+              style={{ width: '200px' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="刷新频率"
+            name="refreshInterval"
+            help="自动拉取数据的频率，默认1分钟"
+            initialValue={1}
+          >
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              suffix="分钟"
+              placeholder="请输入刷新频率"
               style={{ width: '200px' }}
             />
           </Form.Item>

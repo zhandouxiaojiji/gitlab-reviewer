@@ -51,6 +51,10 @@ class SchedulerService {
   private commitPullInterval: NodeJS.Timeout | null = null;
   private commentPullInterval: NodeJS.Timeout | null = null;
   private readonly DATA_DIR = path.join(process.cwd(), 'data');
+  
+  // 可配置的刷新频率（毫秒），默认1分钟
+  private commitPullIntervalMs: number = 60 * 1000; // 1分钟
+  private commentPullIntervalMs: number = 60 * 1000; // 1分钟
 
   constructor() {
     this.ensureDataDir();
@@ -247,38 +251,64 @@ class SchedulerService {
     }
   }
 
-  // 启动commit拉取定时任务（每5分钟）
+  // 设置刷新频率（分钟）
+  public setRefreshInterval(minutes: number = 1) {
+    const intervalMs = minutes * 60 * 1000;
+    this.commitPullIntervalMs = intervalMs;
+    this.commentPullIntervalMs = intervalMs;
+    
+    console.log(`刷新频率已设置为 ${minutes} 分钟`);
+    
+    // 如果定时任务正在运行，重新启动以应用新的频率
+    if (this.commitPullInterval || this.commentPullInterval) {
+      this.stopAll();
+      this.startAll();
+    }
+  }
+
+  // 获取当前刷新频率（分钟）
+  public getRefreshInterval(): number {
+    return this.commitPullIntervalMs / (60 * 1000);
+  }
+
+  // 启动commit拉取定时任务
   public startCommitPulling() {
     if (this.commitPullInterval) {
       return;
     }
     
-    console.log('启动commit拉取定时任务...');
+    console.log(`启动commit拉取定时任务，间隔: ${this.getRefreshInterval()} 分钟`);
     
     // 立即执行一次
     this.pullAllProjectsCommits();
     
-    // 每5分钟执行一次
+    // 按配置的间隔执行
     this.commitPullInterval = setInterval(() => {
       this.pullAllProjectsCommits();
-    }, 5 * 60 * 1000);
+    }, this.commitPullIntervalMs);
   }
 
-  // 启动评论拉取定时任务（每10秒）
+  // 启动评论拉取定时任务
   public startCommentPulling() {
     if (this.commentPullInterval) {
       return;
     }
     
-    console.log('启动评论拉取定时任务...');
+    console.log(`启动评论拉取定时任务，间隔: ${this.getRefreshInterval()} 分钟`);
     
     // 立即执行一次
     this.pullAllProjectsComments();
     
-    // 每10秒执行一次
+    // 按配置的间隔执行
     this.commentPullInterval = setInterval(() => {
       this.pullAllProjectsComments();
-    }, 10 * 1000);
+    }, this.commentPullIntervalMs);
+  }
+
+  // 启动所有定时任务
+  public startAll() {
+    this.startCommitPulling();
+    this.startCommentPulling();
   }
 
   // 拉取所有项目的commit
@@ -461,6 +491,51 @@ class SchedulerService {
     const project = projectStorage.findById(projectId);
     if (project) {
       await this.pullProjectBranches(project);
+    }
+  }
+
+  // 手动刷新所有数据（commit、评论、分支）
+  public async manualRefreshAll(projectId?: string): Promise<void> {
+    try {
+      console.log('开始手动刷新所有数据...');
+      
+      if (projectId) {
+        // 刷新指定项目
+        const project = projectStorage.findById(projectId);
+        if (project) {
+          console.log(`手动刷新项目: ${project.name}`);
+          await Promise.all([
+            this.pullProjectCommits(project),
+            this.pullCommitComments(project),
+            this.pullProjectBranches(project)
+          ]);
+          console.log(`项目 ${project.name} 手动刷新完成`);
+        } else {
+          throw new Error(`项目 ${projectId} 不存在`);
+        }
+      } else {
+        // 刷新所有项目
+        const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
+        console.log(`手动刷新 ${projects.length} 个项目的所有数据...`);
+        
+        for (const project of projects) {
+          try {
+            console.log(`正在刷新项目: ${project.name}`);
+            await Promise.all([
+              this.pullProjectCommits(project),
+              this.pullCommitComments(project),
+              this.pullProjectBranches(project)
+            ]);
+            console.log(`项目 ${project.name} 刷新完成`);
+          } catch (error) {
+            console.error(`项目 ${project.name} 刷新失败:`, error);
+          }
+        }
+        console.log('所有项目手动刷新完成');
+      }
+    } catch (error) {
+      console.error('手动刷新失败:', error);
+      throw error;
     }
   }
 }

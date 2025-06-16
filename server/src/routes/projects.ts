@@ -3,6 +3,7 @@ import { Response, NextFunction } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { projectStorage } from '../utils/storage';
 import { GitlabUserService } from '../services/gitlabUserService';
+import { schedulerService } from '../services/schedulerService';
 import axios from 'axios';
 import { validateFilterRules } from '../utils/filterUtils';
 
@@ -25,11 +26,16 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 创建新项目
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules, refreshInterval } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
+    }
+
+    // 验证刷新频率
+    if (refreshInterval !== undefined && (refreshInterval < 1 || refreshInterval > 60)) {
+      return res.status(400).json({ message: '刷新频率必须在1-60分钟之间' });
     }
 
     // 生成项目ID（基于GitLab URL + 项目名称）
@@ -63,6 +69,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       reviewDays: reviewDays || 7, // 审核范围默认7天
       maxCommits: maxCommits || 100, // 拉取记录上限默认100条
       filterRules: filterRules || '', // 过滤规则
+      refreshInterval: refreshInterval || 1, // 刷新频率默认1分钟
       isActive: true,
       createdBy: req.user.id
     });
@@ -88,11 +95,16 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { id: projectId } = req.params;
-    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules, refreshInterval } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
+    }
+
+    // 验证刷新频率
+    if (refreshInterval !== undefined && (refreshInterval < 1 || refreshInterval > 60)) {
+      return res.status(400).json({ message: '刷新频率必须在1-60分钟之间' });
     }
 
     // 检查项目是否存在
@@ -135,6 +147,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
         maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
         filterRules: filterRules !== undefined ? filterRules : (existingProject.filterRules || ''),
+        refreshInterval: refreshInterval !== undefined ? refreshInterval : (existingProject.refreshInterval || 1),
         userMappings: existingProject.userMappings || {},
         isActive: true,
         createdBy: existingProject.createdBy,
@@ -166,6 +179,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
         maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
         filterRules: filterRules !== undefined ? filterRules : (existingProject.filterRules || ''),
+        refreshInterval: refreshInterval !== undefined ? refreshInterval : (existingProject.refreshInterval || 1),
         updatedAt: new Date().toISOString()
       });
 
@@ -782,6 +796,53 @@ router.post('/validate-filter-rules', authenticateToken, async (req: AuthRequest
   } catch (error) {
     console.error('验证过滤规则错误:', error);
     res.status(500).json({ message: '服务器内部错误' });
+  }
+});
+
+// 手动刷新项目数据
+router.post('/:id/refresh', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: projectId } = req.params;
+    
+    const project = projectStorage.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 执行手动刷新
+    await schedulerService.manualRefreshAll(projectId);
+    
+    res.json({ 
+      message: '项目数据刷新成功',
+      projectId,
+      projectName: project.name,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('手动刷新项目数据错误:', error);
+    res.status(500).json({ 
+      message: '刷新失败', 
+      error: error instanceof Error ? error.message : '未知错误' 
+    });
+  }
+});
+
+// 手动刷新所有项目数据
+router.post('/refresh-all', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    // 执行手动刷新所有项目
+    await schedulerService.manualRefreshAll();
+    
+    res.json({ 
+      message: '所有项目数据刷新成功',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('手动刷新所有项目数据错误:', error);
+    res.status(500).json({ 
+      message: '刷新失败', 
+      error: error instanceof Error ? error.message : '未知错误' 
+    });
   }
 });
 

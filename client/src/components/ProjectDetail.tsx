@@ -27,6 +27,7 @@ interface GitLabProject {
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   reviewDays?: number; // 审核范围（天数），默认7天
   maxCommits?: number; // 拉取记录上限，默认100条
+  refreshInterval?: number; // 刷新频率（分钟），默认1分钟
   createdAt: string;
 }
 
@@ -613,6 +614,26 @@ const ProjectDetail: React.FC = () => {
     setSelectedBranch(branchName);
   };
 
+  // 手动刷新项目数据
+  const handleRefreshProject = async () => {
+    if (!project) return;
+    
+    try {
+      setLoading(true);
+      await api.post(`/api/projects/${project.id}/refresh`);
+      message.success('项目数据刷新成功');
+      
+      // 刷新完成后重新加载数据
+      setTimeout(() => {
+        loadCommits();
+      }, 1000);
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '刷新失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <MainLayout>
       <style>
@@ -658,6 +679,10 @@ const ProjectDetail: React.FC = () => {
                 <Typography.Text strong>拉取记录上限: </Typography.Text>
                 <Typography.Text>{project?.maxCommits || 100} 条</Typography.Text>
               </div>
+              <div style={{ marginTop: '8px' }}>
+                <Typography.Text strong>刷新频率: </Typography.Text>
+                <Typography.Text>{project?.refreshInterval || 1} 分钟</Typography.Text>
+              </div>
               
               {/* 分支选择 */}
               <div style={{ marginTop: '16px' }}>
@@ -690,23 +715,52 @@ const ProjectDetail: React.FC = () => {
             
             {/* 统计信息 */}
             <Col span={6}>
-              <Row gutter={[16, 16]}>
-                <Col span={12}>
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Button 
+                  type="primary" 
+                  icon={<EyeOutlined />} 
+                  onClick={loadCommits}
+                  loading={loading}
+                  block
+                >
+                  查看提交记录
+                </Button>
+                
+                <Button 
+                  icon={<BranchesOutlined />} 
+                  onClick={handleRefreshProject}
+                  loading={loading}
+                  block
+                >
+                  手动刷新
+                </Button>
+                
+                <Card size="small">
                   <Statistic
                     title="总提交数"
                     value={commits.length}
-                    prefix={<EyeOutlined />}
+                    prefix={<CodeOutlined />}
                   />
-                </Col>
-                <Col span={12}>
+                </Card>
+                
+                <Card size="small">
                   <Statistic
-                    title="Review覆盖率"
-                    value={commits.length > 0 ? Math.round((reviewedCount / commits.length) * 100) : 0}
-                    suffix="%"
+                    title="已审核"
+                    value={commits.filter(c => c.hasReview).length}
+                    valueStyle={{ color: '#3f8600' }}
                     prefix={<CheckCircleOutlined />}
                   />
-                </Col>
-              </Row>
+                </Card>
+                
+                <Card size="small">
+                  <Statistic
+                    title="待审核"
+                    value={commits.filter(c => !c.hasReview).length}
+                    valueStyle={{ color: '#cf1322' }}
+                    prefix={<ClockCircleOutlined />}
+                  />
+                </Card>
+              </Space>
             </Col>
           </Row>
         </Card>

@@ -6,8 +6,10 @@ import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
 import reviewRoutes from './routes/reviews';
 import gitlabRoutes from './routes/gitlab';
+import { authenticateToken } from './middleware/auth';
 import { GitlabUserService } from './services/gitlabUserService';
 import schedulerService from './services/schedulerService';
+import { projectStorage } from './utils/storage';
 
 dotenv.config();
 
@@ -47,14 +49,29 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // 启动服务器
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
   console.log(`健康检查: http://localhost:${PORT}/health`);
   
+  // 根据项目配置设置刷新频率
+  try {
+    const projects = projectStorage.findAll().filter((p: any) => !p.deletedAt && p.isActive !== false);
+    if (projects.length > 0) {
+      // 使用所有项目中最小的刷新频率，确保所有项目都能及时更新
+      const minRefreshInterval = Math.min(...projects.map((p: any) => p.refreshInterval || 1));
+      console.log(`检测到 ${projects.length} 个项目，设置刷新频率为 ${minRefreshInterval} 分钟`);
+      schedulerService.setRefreshInterval(minRefreshInterval);
+    } else {
+      console.log('暂无项目配置，使用默认刷新频率 1 分钟');
+      schedulerService.setRefreshInterval(1);
+    }
+  } catch (error) {
+    console.error('设置刷新频率失败，使用默认值:', error);
+    schedulerService.setRefreshInterval(1);
+  }
+  
   // 启动定时任务
-  console.log('启动定时拉取服务...');
-  schedulerService.startCommitPulling();
-  schedulerService.startCommentPulling();
+  schedulerService.startAll();
 });
 
 // 优雅关闭
