@@ -220,6 +220,32 @@ const ProjectDetail: React.FC = () => {
     }
   }, [project, selectedBranch]);
 
+  // 手动刷新GitLab数据
+  const handleRefresh = useCallback(async () => {
+    if (!project) return;
+    
+    try {
+      setLoading(true);
+      
+      // 先调用sync API，触发从GitLab拉取最新数据
+      console.log(`手动刷新项目 ${project.name} 的GitLab数据`);
+      await api.post(`/api/gitlab/projects/${project.id}/sync`);
+      
+      // 短暂延时，让后端完成数据拉取
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 然后重新加载本地数据
+      await loadCommits();
+      
+      message.success('数据刷新完成');
+    } catch (error: any) {
+      console.error('刷新失败:', error);
+      message.error('刷新失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  }, [project, loadCommits]);
+
   // 加载分支列表
   useEffect(() => {
     if (project) {
@@ -712,7 +738,7 @@ const ProjectDetail: React.FC = () => {
           extra={
             <Button 
               type="primary" 
-              onClick={loadCommits}
+              onClick={handleRefresh}
               loading={loading}
             >
               刷新

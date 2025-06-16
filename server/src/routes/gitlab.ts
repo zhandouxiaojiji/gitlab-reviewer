@@ -1,10 +1,9 @@
-import express, { Router, Response } from 'express';
-import { Request } from 'express';
-import { authenticateToken } from '../middleware/auth';
-import { projectStorage } from '../utils/storage';
+import { Router, Request, Response } from 'express';
 import axios from 'axios';
+import { authenticateToken } from '../middleware/auth';
 import { shouldSkipReview } from '../utils/filterUtils';
 import schedulerService from '../services/schedulerService';
+import { storage } from '../utils/storage';
 
 const router = Router();
 
@@ -50,7 +49,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
     console.log(`获取项目 ${projectId} 的提交记录，分支: ${branch}，获取全部: ${all}`);
 
     // 获取项目信息
-    const project = projectStorage.findById(projectId);
+    const project = storage.getProject(projectId);
     if (!project) {
       return res.status(404).json({ message: '项目不存在' });
     }
@@ -136,7 +135,7 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
     console.log(`手动刷新项目 ${projectId} 的数据`);
 
     // 获取项目信息
-    const project = projectStorage.findById(projectId);
+    const project = storage.getProject(projectId);
     if (!project) {
       return res.status(404).json({ message: '项目不存在' });
     }
@@ -166,7 +165,7 @@ router.get('/projects/:projectId/users/:username', authenticateToken, async (req
   try {
     const { projectId, username } = req.params;
     
-    const project = projectStorage.findById(projectId);
+    const project = storage.getProject(projectId);
     if (!project) {
       return res.status(404).json({ message: '项目不存在' });
     }
@@ -192,7 +191,7 @@ router.get('/projects/:projectId/branches', authenticateToken, async (req: AuthR
   try {
     const { projectId } = req.params;
     
-    const project = projectStorage.findById(projectId);
+    const project = storage.getProject(projectId);
     if (!project) {
       return res.status(404).json({ message: '项目不存在' });
     }
@@ -216,6 +215,42 @@ router.get('/projects/:projectId/branches', authenticateToken, async (req: AuthR
       branches: [],
       defaultBranch: 'main',
       total: 0
+    });
+  }
+});
+
+// 手动同步项目数据
+router.post('/projects/:id/sync', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    
+    // 获取项目配置
+    const projects = storage.getProjects();
+    const project = projects.find((p: any) => p.id === parseInt(projectId));
+    
+    if (!project) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `项目ID ${projectId} 不存在` 
+      });
+    }
+    
+    console.log(`[手动同步] 开始同步项目: ${project.name}`);
+    
+    // 使用调度服务的手动刷新功能
+    await schedulerService.manualRefreshAll(projectId);
+    
+    console.log(`[手动同步] 项目 ${project.name} 同步完成`);
+    
+    res.json({ 
+      success: true, 
+      message: `项目 ${project.name} 数据同步完成` 
+    });
+  } catch (error) {
+    console.error('手动同步失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error instanceof Error ? error.message : '手动同步失败' 
     });
   }
 });
