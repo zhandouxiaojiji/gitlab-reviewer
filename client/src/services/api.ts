@@ -38,16 +38,19 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // 从localStorage获取用户信息并添加到请求参数中
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const user = JSON.parse(userData);
+      config.params = { ...config.params, user: user.username };
     }
     
     // 调试信息
     console.log('API请求:', {
       url: config.url,
       baseURL: config.baseURL,
-      fullUrl: `${config.baseURL}${config.url}`
+      fullUrl: `${config.baseURL}${config.url}`,
+      params: config.params
     });
     
     return config;
@@ -74,12 +77,7 @@ api.interceptors.response.use(
       console.error('当前API地址:', getApiBaseUrl());
     }
     
-    if (error.response?.status === 401) {
-      // Token过期，清除本地存储并跳转到登录页
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
+    // 删除401错误的特殊处理，因为不再使用token
     return Promise.reject(error);
   }
 );

@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 
 // 简化的用户列表（与auth.ts保持一致）
 const users = [
@@ -15,34 +14,21 @@ export interface AuthRequest extends Request {
   user?: any;
 }
 
+// 简单的用户身份验证中间件，通过URL参数获取用户信息
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  // 从查询参数或请求体中获取用户名
+  const username = req.query.user as string || req.body.user as string || 'anonymous';
+  
+  // 创建用户对象
+  const user = {
+    id: `user-${username}`,
+    username: username,
+    email: `${username}@example.com`,
+    role: username === 'admin' ? 'admin' : 'user'
+  };
 
-  if (!token) {
-    return res.status(401).json({ message: '访问令牌缺失' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { userId: string; username: string };
-    let user = users.find(u => u.id === decoded.userId);
-    
-    if (!user) {
-      // 如果用户不存在，从token中重建用户信息
-      user = {
-        id: decoded.userId,
-        username: decoded.username,
-        email: `${decoded.username}@example.com`,
-        role: 'user'
-      };
-      users.push(user);
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    return res.status(403).json({ message: '无效的访问令牌' });
-  }
+  req.user = user;
+  next();
 };
 
 export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {

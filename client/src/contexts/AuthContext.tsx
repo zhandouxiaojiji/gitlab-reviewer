@@ -35,15 +35,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 检查本地存储的token
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      // 这里可以验证token有效性
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        setUser(JSON.parse(userData));
-      }
+    // 检查本地存储的用户信息
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const parsedUser = JSON.parse(userData);
+      setUser(parsedUser);
+      // 设置全局用户参数
+      api.defaults.params = { ...api.defaults.params, user: parsedUser.username };
     }
     setLoading(false);
   }, []);
@@ -53,15 +51,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       const response = await api.post('/api/auth/login', { username });
       
-      if (response.data.token) {
-        const { token, user: userData } = response.data;
+      if (response.data.user) {
+        const { user: userData } = response.data;
         
-        // 保存token和用户信息
-        localStorage.setItem('token', token);
+        // 保存用户信息
         localStorage.setItem('user', JSON.stringify(userData));
         
-        // 设置默认请求头
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // 设置全局用户参数
+        api.defaults.params = { ...api.defaults.params, user: userData.username };
         
         setUser(userData);
         message.success('登录成功！');
@@ -77,9 +74,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
     localStorage.removeItem('user');
-    delete api.defaults.headers.common['Authorization'];
+    // 清除全局用户参数
+    if (api.defaults.params) {
+      delete api.defaults.params.user;
+    }
     setUser(null);
     message.success('已退出登录');
   };
