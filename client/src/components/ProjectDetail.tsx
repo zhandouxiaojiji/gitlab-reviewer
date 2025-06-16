@@ -227,24 +227,101 @@ const ProjectDetail: React.FC = () => {
     try {
       setLoading(true);
       
-      // 先调用sync API，触发从GitLab拉取最新数据
-      console.log(`手动刷新项目 ${project.name} 的GitLab数据`);
-      await api.post(`/api/gitlab/projects/${project.id}/sync`);
+      // 检查是否为首次刷新（没有分支数据）
+      const isFirstRefresh = branches.length === 0;
       
-      // 短暂延时，让后端完成数据拉取
+      console.log(`手动刷新项目 ${project.name} 的GitLab数据${isFirstRefresh ? ' (首次刷新)' : ''}`);
+      
+      // 先调用sync API，触发从GitLab拉取最新数据
+      await api.post(`/api/gitlab/projects/${project.id}/sync`);
+      console.log('后端数据同步完成');
+      
+      // 数据同步完成后，等待一小段时间确保文件系统操作完成
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // 然后重新加载本地数据
-      await loadCommits();
+      // 重新加载分支数据
+      console.log('重新加载分支数据...');
+      const branchResponse = await api.get(`/api/gitlab/projects/${project.id}/branches`);
+      const branchData: BranchesResponse = branchResponse.data;
       
-      message.success('数据刷新完成');
+      // 更新分支状态
+      setBranches(branchData.branches);
+      const newSelectedBranch = branchData.defaultBranch;
+      setSelectedBranch(newSelectedBranch);
+      
+      console.log(`分支数据加载完成，共 ${branchData.branches.length} 个分支，默认分支: ${newSelectedBranch}`);
+      
+      // 再等待一小段时间，确保状态更新完成
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 重新加载commit数据
+      console.log('重新加载commit数据...');
+      const commitResponse = await api.get(`/api/gitlab/projects/${project.id}/commits`, {
+        params: {
+          branch: newSelectedBranch,
+          all: 'true'
+        }
+      });
+      
+      // 处理commit数据
+      const responseData = commitResponse.data || {};
+      const commitsData = Array.isArray(responseData.commits) ? responseData.commits : [];
+      
+      console.log(`获取到 ${commitsData.length} 个commit记录`);
+      
+      // 更新用户映射关系
+      if (responseData.userMappings) {
+        setUserNicknames(responseData.userMappings);
+      }
+      
+      // 将后端格式转换为前端期望的格式
+      const formattedCommits = commitsData.map((commit: any) => {
+        const allReviewers = commit.comments?.map((comment: any) => {
+          if (comment.author) {
+            return comment.author.username || comment.author.name || '';
+          }
+          return '';
+        }).filter(Boolean) || [];
+        
+        const uniqueReviewers = Array.from(new Set(allReviewers));
+        
+        return {
+          id: commit.id,
+          commitId: commit.short_id,
+          fullCommitId: commit.id,
+          commitMessage: commit.message,
+          author: commit.author_name,
+          date: commit.committed_date,
+          hasReview: commit.has_comments,
+          reviewer: uniqueReviewers[0] || '',
+          allReviewers: uniqueReviewers,
+          reviewComments: commit.comments_count || 0,
+          gitlabUrl: commit.web_url,
+          skip_review: commit.skip_review,
+          key: commit.id
+        };
+      });
+      
+      // 按提交时间从新到旧排序
+      formattedCommits.sort((a: CommitReview, b: CommitReview) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateB - dateA;
+      });
+      
+      setCommits(formattedCommits);
+      setError(null);
+      
+      console.log(`数据刷新完成：${branchData.branches.length} 个分支，${formattedCommits.length} 个commit`);
+      message.success(`数据刷新完成${isFirstRefresh ? ' (首次初始化)' : ''}`);
+      
     } catch (error: any) {
       console.error('刷新失败:', error);
       message.error('刷新失败: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
-  }, [project, loadCommits]);
+  }, [project, branches.length]);
 
   // 加载分支列表
   useEffect(() => {

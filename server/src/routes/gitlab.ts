@@ -55,7 +55,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
     }
 
     // 从本地JSON文件读取commit数据
-    const commits = schedulerService.getProjectCommits(projectId);
+    const commits = schedulerService.getProjectCommits(projectId, branch as string);
     
     console.log(`从本地文件读取到 ${commits.length} 个提交记录`);
 
@@ -140,12 +140,8 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 手动触发commit、评论和分支拉取
-    await Promise.all([
-      schedulerService.manualPullCommits(projectId),
-      schedulerService.manualPullComments(projectId),
-      schedulerService.manualPullBranches(projectId)
-    ]);
+    // 使用调度服务的手动刷新功能（会自动判断是否首次刷新并按正确顺序执行）
+    await schedulerService.manualRefreshAll(projectId);
 
     res.json({ 
       message: '数据刷新完成',

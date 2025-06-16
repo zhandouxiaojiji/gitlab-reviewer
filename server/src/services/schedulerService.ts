@@ -18,6 +18,7 @@ interface CommitData {
   comments: any[];
   allReviewers?: string[];
   needsReview?: boolean; // 是否需要继续拉取评论
+  branch: string; // 添加分支信息
 }
 
 interface ProjectCommitData {
@@ -223,11 +224,11 @@ class SchedulerService {
               
               if (existingCommitIndex === -1) {
                 // 新commit，添加到列表
-                const skipReview = shouldSkipReview(commit.message || '', project.filterRules || '');
-                const newCommitData: CommitData = {
+                const skipReview = shouldSkipReview(commit.title || commit.message || '', project.filterRules || '');
+                const formattedCommit: CommitData = {
                   id: commit.id,
                   short_id: commit.short_id,
-                  message: commit.message,
+                  message: commit.title || commit.message || '',
                   author_name: commit.author_name,
                   author_email: commit.author_email,
                   committed_date: commit.committed_date,
@@ -236,10 +237,11 @@ class SchedulerService {
                   comments_count: 0,
                   skip_review: skipReview,
                   comments: [],
-                  needsReview: !skipReview
+                  needsReview: !skipReview,
+                  branch: defaultBranch // 添加分支信息
                 };
                 
-                projectData.commits.push(newCommitData);
+                projectData.commits.push(formattedCommit);
                 pageNewCount++;
                 
                 // 显示新增的commit
@@ -512,8 +514,14 @@ class SchedulerService {
   }
 
   // 获取项目的commit数据（供API使用）
-  public getProjectCommits(projectId: string): CommitData[] {
+  public getProjectCommits(projectId: string, branch?: string): CommitData[] {
     const projectData = this.readProjectCommitData(projectId);
+    
+    // 如果指定了分支，则过滤该分支的commits
+    if (branch) {
+      return projectData.commits.filter(commit => commit.branch === branch);
+    }
+    
     return projectData.commits;
   }
 
@@ -604,39 +612,57 @@ class SchedulerService {
         }
       }));
 
-      // 确定默认分支
+      // 确定默认分支 - 改进算法
       let defaultBranch = 'main';
+      
+      // 首先查找API标记的默认分支
       const defaultBranchObj = branchData.find(b => b.default);
       if (defaultBranchObj) {
         defaultBranch = defaultBranchObj.name;
-        console.log(`🔖 [${project.name}] 检测到默认分支: ${defaultBranch}`);
+        console.log(`🔖 [${project.name}] 检测到API标记的默认分支: ${defaultBranch}`);
       } else {
-        // 查找常见的默认分支名称
-        const commonDefaultBranches = ['main', 'master', 'develop', 'dev'];
+        // 如果API没有标记，按优先级查找常见的默认分支名称
+        const commonDefaultBranches = ['main', 'master', 'develop', 'dev', 'trunk'];
+        let found = false;
+        
         for (const commonBranch of commonDefaultBranches) {
-          if (branchData.find(b => b.name === commonBranch)) {
-            defaultBranch = commonBranch;
+          const foundBranch = branchData.find(b => b.name.toLowerCase() === commonBranch.toLowerCase());
+          if (foundBranch) {
+            defaultBranch = foundBranch.name;
             console.log(`🔖 [${project.name}] 使用常见默认分支: ${defaultBranch}`);
+            found = true;
             break;
           }
         }
-        if (!branchData.find(b => b.name === defaultBranch)) {
-          defaultBranch = branchData[0]?.name || 'main';
+        
+        // 如果都没找到，使用第一个分支
+        if (!found && branchData.length > 0) {
+          defaultBranch = branchData[0].name;
           console.log(`🔖 [${project.name}] 使用第一个分支作为默认: ${defaultBranch}`);
+        }
+        
+        // 如果没有任何分支，给出警告
+        if (branchData.length === 0) {
+          console.warn(`⚠️  [${project.name}] 未找到任何分支，使用默认值: ${defaultBranch}`);
         }
       }
 
       // 显示分支列表
       console.log(`📋 [${project.name}] 分支列表:`);
-      branchData.forEach((branch, index) => {
-        const flags = [];
-        if (branch.default) flags.push('默认');
-        if (branch.protected) flags.push('保护');
-        if (branch.merged) flags.push('已合并');
-        const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
-        
-        console.log(`   ${index + 1}. ${branch.name}${flagStr} - ${branch.commit.short_id}: ${branch.commit.message.substring(0, 30)}...`);
-      });
+      if (branchData.length > 0) {
+        branchData.forEach((branch, index) => {
+          const flags = [];
+          if (branch.name === defaultBranch) flags.push('默认');
+          if (branch.protected) flags.push('保护');
+          if (branch.merged) flags.push('已合并');
+          const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
+          
+          const dateStr = new Date(branch.commit.committed_date).toLocaleDateString();
+          console.log(`   ${index + 1}. ${branch.name}${flagStr} - ${branch.commit.short_id}: ${branch.commit.message.substring(0, 30)}... (${dateStr})`);
+        });
+      } else {
+        console.log(`   (暂无分支数据)`);
+      }
 
       // 保存分支数据
       const projectBranchData: ProjectBranchData = {
@@ -653,6 +679,16 @@ class SchedulerService {
       
     } catch (error) {
       console.error(`❌ [${project.name}] 分支拉取失败:`, error instanceof Error ? error.message : error);
+      
+      // 即使拉取失败，也要保存一个默认的分支配置，避免阻塞后续操作
+      const fallbackBranchData: ProjectBranchData = {
+        projectId: project.id,
+        lastBranchPullTime: new Date().toISOString(),
+        branches: [],
+        defaultBranch: 'main'
+      };
+      this.saveProjectBranchData(fallbackBranchData);
+      console.log(`🔧 [${project.name}] 已保存fallback分支配置，默认分支: main`);
     }
   }
 
@@ -686,11 +722,35 @@ class SchedulerService {
           console.log(`📅 开始时间: ${new Date().toLocaleString()}`);
           console.log(`═══════════════════════════════════════════════════════\n`);
           
-          await Promise.all([
-            this.pullProjectCommits(project),
-            this.pullCommitComments(project),
-            this.pullProjectBranches(project)
-          ]);
+          // 检查是否为首次刷新（没有分支信息）
+          const branchData = this.readProjectBranchData(project.id);
+          const isFirstRefresh = branchData.branches.length === 0;
+          
+          if (isFirstRefresh) {
+            console.log(`🆕 [${project.name}] 检测到首次刷新，将按顺序执行初始化...`);
+            
+            // 步骤1: 先拉取分支信息
+            console.log(`📌 [${project.name}] 步骤1: 拉取分支信息...`);
+            await this.pullProjectBranches(project);
+            
+            // 步骤2: 获取默认分支后拉取commit
+            console.log(`📌 [${project.name}] 步骤2: 拉取commit数据...`);
+            await this.pullProjectCommits(project);
+            
+            // 步骤3: 拉取评论
+            console.log(`📌 [${project.name}] 步骤3: 拉取评论数据...`);
+            await this.pullCommitComments(project);
+            
+            console.log(`🎉 [${project.name}] 首次初始化完成！`);
+          } else {
+            // 非首次刷新，可以并行执行
+            console.log(`🔄 [${project.name}] 执行增量刷新...`);
+            await Promise.all([
+              this.pullProjectCommits(project),
+              this.pullCommitComments(project),
+              this.pullProjectBranches(project)
+            ]);
+          }
           
           console.log(`\n✅ ============ 项目 ${project.name} 手动刷新完成 ============`);
           console.log(`📅 完成时间: ${new Date().toLocaleString()}`);
@@ -710,11 +770,26 @@ class SchedulerService {
           const project = projects[i];
           console.log(`\n📂 [${i + 1}/${projects.length}] 处理项目: ${project.name}`);
           try {
-            await Promise.all([
-              this.pullProjectCommits(project),
-              this.pullCommitComments(project),
-              this.pullProjectBranches(project)
-            ]);
+            // 检查是否为首次刷新
+            const branchData = this.readProjectBranchData(project.id);
+            const isFirstRefresh = branchData.branches.length === 0;
+            
+            if (isFirstRefresh) {
+              console.log(`🆕 [${project.name}] 检测到首次刷新，按顺序初始化...`);
+              
+              // 顺序执行：分支 -> commit -> 评论
+              await this.pullProjectBranches(project);
+              await this.pullProjectCommits(project);
+              await this.pullCommitComments(project);
+            } else {
+              console.log(`🔄 [${project.name}] 执行增量刷新...`);
+              // 非首次可以并行执行
+              await Promise.all([
+                this.pullProjectCommits(project),
+                this.pullCommitComments(project),
+                this.pullProjectBranches(project)
+              ]);
+            }
           } catch (error) {
             console.error(`❌ 项目 ${project.name} 刷新失败:`, error instanceof Error ? error.message : error);
           }
