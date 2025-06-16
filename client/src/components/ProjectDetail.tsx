@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Button, Space, message, Typography, List, Avatar, Divider, Row, Col, Statistic, Select } from 'antd';
+import { Card, Tag, Button, Space, message, Typography, List, Avatar, Row, Col, Statistic, Select } from 'antd';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  EyeOutlined,
-  UserOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CopyOutlined,
   CodeOutlined,
-  MessageOutlined,
   LinkOutlined,
   BranchesOutlined
 } from '@ant-design/icons';
@@ -339,7 +336,7 @@ const ProjectDetail: React.FC = () => {
           status: 'own', 
           text: '本人提交', 
           color: 'blue',
-          icon: <UserOutlined />
+          icon: <CheckCircleOutlined />
         };
       }
       
@@ -456,16 +453,13 @@ const ProjectDetail: React.FC = () => {
           color: '#8c8c8c'
         }}>
           <Text type="secondary">
-            <UserOutlined style={{ marginRight: '4px' }} />
             {userNicknames[commit.author] || commit.author}
           </Text>
           <Text type="secondary">
-            <ClockCircleOutlined style={{ marginRight: '4px' }} />
             {formatDate(commit.date)}
           </Text>
           {commit.hasReview && commit.allReviewers && commit.allReviewers.length > 0 && (
             <Text type="secondary">
-              <CheckCircleOutlined style={{ marginRight: '4px' }} />
               审核人: {commit.allReviewers.map(reviewer => userNicknames[reviewer] || reviewer).join(', ')}
             </Text>
           )}
@@ -541,7 +535,6 @@ const ProjectDetail: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {commit.hasReview && (
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                <MessageOutlined style={{ marginRight: '2px' }} />
                 {commit.reviewComments} 条评论
               </Text>
             )}
@@ -566,72 +559,23 @@ const ProjectDetail: React.FC = () => {
 
   // 更新审核覆盖率计算逻辑
   const calculateReviewStats = () => {
-    if (!project.reviewers || project.reviewers.length === 0) {
-      // 如果没有配置审核人员，使用原来的逻辑
-      const reviewedCount = commits.filter(c => c.hasReview || c.skip_review).length;
-      const totalCount = commits.length;
-      const reviewRate = totalCount > 0 ? ((reviewedCount / totalCount) * 100).toFixed(1) : '0';
-      return { reviewedCount, totalCount, reviewRate };
-    }
-
-    // 如果配置了审核人员，需要计算每个提交需要的审核人员数量
-    let reviewedCount = 0;
-    const totalCount = commits.length;
-
-    commits.forEach(commit => {
-      // 首先检查：如果符合过滤规则，算作无需审核（已完成）
-      if (commit.skip_review) {
-        reviewedCount++;
-        return;
-      }
-      
-      // 然后检查：如果是当前用户自己的提交，算作无需审核（已完成）
-      if (commit.author === username || 
-          (userNicknames[commit.author] && userNicknames[commit.author] === username) ||
-          (Object.keys(userNicknames).find(key => userNicknames[key] === username) === commit.author)) {
-        reviewedCount++;
-        return;
-      }
-      
-      const requiredReviewers = project.reviewers!.filter(reviewer => reviewer !== commit.author);
-      if (requiredReviewers.length === 0) {
-        // 如果提交人是唯一的审核人员，则认为不需要审核
-        reviewedCount++;
-      } else if (commit.hasReview) {
-        // 目前只支持单人审核，后续可以扩展为多人审核
-        reviewedCount++;
-      }
-    });
-
-    const reviewRate = totalCount > 0 ? ((reviewedCount / totalCount) * 100).toFixed(1) : '0';
-    return { reviewedCount, totalCount, reviewRate };
+    const totalCommits = commits.length;
+    const reviewedCommits = commits.filter(c => c.hasReview).length;
+    const pendingCommits = commits.filter(c => !c.hasReview && !c.skip_review).length;
+    
+    return {
+      totalCommits,
+      reviewedCommits,
+      pendingCommits,
+      reviewRate: totalCommits > 0 ? ((reviewedCommits / (totalCommits - commits.filter(c => c.skip_review).length)) * 100).toFixed(1) : '0'
+    };
   };
 
-  const { reviewedCount } = calculateReviewStats();
+  const { totalCommits, reviewedCommits, pendingCommits, reviewRate } = calculateReviewStats();
 
   // 分支选择变化处理
   const handleBranchChange = (branchName: string) => {
     setSelectedBranch(branchName);
-  };
-
-  // 手动刷新项目数据
-  const handleRefreshProject = async () => {
-    if (!project) return;
-    
-    try {
-      setLoading(true);
-      await api.post(`/api/projects/${project.id}/refresh`);
-      message.success('项目数据刷新成功');
-      
-      // 刷新完成后重新加载数据
-      setTimeout(() => {
-        loadCommits();
-      }, 1000);
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '刷新失败');
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (
@@ -656,9 +600,9 @@ const ProjectDetail: React.FC = () => {
           }
         `}
       </style>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
         {/* 项目信息卡片 */}
-        <Card style={{ marginBottom: '24px' }}>
+        <Card>
           <Row gutter={[16, 16]}>
             <Col span={18}>
               <Typography.Title level={3} style={{ margin: 0 }}>
@@ -671,18 +615,6 @@ const ProjectDetail: React.FC = () => {
                 <Typography.Text strong>GitLab地址: </Typography.Text>
                 <Typography.Text copyable>{project?.gitlabUrl}</Typography.Text>
               </div>
-              <div style={{ marginTop: '8px' }}>
-                <Typography.Text strong>审核范围: </Typography.Text>
-                <Typography.Text>{project?.reviewDays || 7} 天</Typography.Text>
-              </div>
-              <div style={{ marginTop: '8px' }}>
-                <Typography.Text strong>拉取记录上限: </Typography.Text>
-                <Typography.Text>{project?.maxCommits || 100} 条</Typography.Text>
-              </div>
-              <div style={{ marginTop: '8px' }}>
-                <Typography.Text strong>刷新频率: </Typography.Text>
-                <Typography.Text>{project?.refreshInterval || 1} 分钟</Typography.Text>
-              </div>
               
               {/* 分支选择 */}
               <div style={{ marginTop: '16px' }}>
@@ -690,82 +622,71 @@ const ProjectDetail: React.FC = () => {
                 <Select
                   value={selectedBranch}
                   onChange={handleBranchChange}
+                  style={{ width: 200, marginLeft: '8px' }}
                   loading={branchesLoading}
-                  style={{ minWidth: 150, marginLeft: 8 }}
-                  placeholder="选择分支"
-                  suffixIcon={<BranchesOutlined />}
                 >
                   {branches.map(branch => (
                     <Select.Option key={branch.name} value={branch.name}>
                       <Space>
-                        <span>{branch.name}</span>
+                        <BranchesOutlined />
+                        {branch.name}
                         {branch.default && <Tag color="blue">默认</Tag>}
                         {branch.protected && <Tag color="red">保护</Tag>}
                       </Space>
                     </Select.Option>
                   ))}
                 </Select>
-                {selectedBranch && branches.length > 0 && (
-                  <Typography.Text type="secondary" style={{ marginLeft: 16 }}>
-                    共 {branches.length} 个分支
-                  </Typography.Text>
-                )}
               </div>
             </Col>
             
             {/* 统计信息 */}
             <Col span={6}>
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Button 
-                  type="primary" 
-                  icon={<EyeOutlined />} 
-                  onClick={loadCommits}
-                  loading={loading}
-                  block
-                >
-                  查看提交记录
-                </Button>
-                
-                <Button 
-                  icon={<BranchesOutlined />} 
-                  onClick={handleRefreshProject}
-                  loading={loading}
-                  block
-                >
-                  手动刷新
-                </Button>
-                
-                <Card size="small">
-                  <Statistic
-                    title="总提交数"
-                    value={commits.length}
-                    prefix={<CodeOutlined />}
-                  />
-                </Card>
-                
-                <Card size="small">
-                  <Statistic
-                    title="已审核"
-                    value={commits.filter(c => c.hasReview).length}
-                    valueStyle={{ color: '#3f8600' }}
-                    prefix={<CheckCircleOutlined />}
-                  />
-                </Card>
-                
-                <Card size="small">
-                  <Statistic
-                    title="待审核"
-                    value={commits.filter(c => !c.hasReview).length}
-                    valueStyle={{ color: '#cf1322' }}
-                    prefix={<ClockCircleOutlined />}
-                  />
-                </Card>
-              </Space>
+              <Row gutter={[4, 4]}>
+                <Col span={6}>
+                  <Card size="small" style={{ textAlign: 'center', padding: '8px 4px' }}>
+                    <Statistic
+                      title="总提交数"
+                      value={totalCommits}
+                      prefix={<CodeOutlined />}
+                      valueStyle={{ fontSize: '14px' }}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small" style={{ textAlign: 'center', padding: '8px 4px' }}>
+                    <Statistic
+                      title="已审核"
+                      value={reviewedCommits}
+                      valueStyle={{ color: '#3f8600', fontSize: '14px' }}
+                      prefix={<CheckCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small" style={{ textAlign: 'center', padding: '8px 4px' }}>
+                    <Statistic
+                      title="待审核"
+                      value={pendingCommits}
+                      valueStyle={{ color: '#cf1322', fontSize: '14px' }}
+                      prefix={<ClockCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+                <Col span={6}>
+                  <Card size="small" style={{ textAlign: 'center', padding: '8px 4px' }}>
+                    <Statistic
+                      title="覆盖率"
+                      value={reviewRate}
+                      suffix="%"
+                      valueStyle={{ fontSize: '14px' }}
+                      prefix={<CheckCircleOutlined />}
+                    />
+                  </Card>
+                </Col>
+              </Row>
             </Col>
           </Row>
         </Card>
-
-        <Divider />
 
         {/* 提交记录表格 */}
         <Card 
