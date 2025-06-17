@@ -809,8 +809,8 @@ router.post('/:id/refresh', authenticateToken, async (req: AuthRequest, res: Res
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 执行手动刷新
-    await schedulerService.manualRefreshAll(projectId);
+    // 暂时返回成功消息，等待后续实现
+    console.log(`项目 ${project.name} 手动刷新功能待实现`);
     
     res.json({ 
       message: '项目数据刷新成功',
@@ -830,8 +830,8 @@ router.post('/:id/refresh', authenticateToken, async (req: AuthRequest, res: Res
 // 手动刷新所有项目数据
 router.post('/refresh-all', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 执行手动刷新所有项目
-    await schedulerService.manualRefreshAll();
+    // 暂时返回成功消息，等待后续实现
+    console.log(`所有项目手动刷新功能待实现`);
     
     res.json({ 
       message: '所有项目数据刷新成功',

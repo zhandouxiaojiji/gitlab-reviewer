@@ -232,16 +232,35 @@ const ProjectDetail: React.FC = () => {
       
       console.log(`手动刷新项目 ${project.name} 的GitLab数据${isFirstRefresh ? ' (首次刷新)' : ''}`);
       
+      // 生成时间戳避免缓存
+      const timestamp = Date.now();
+      
       // 先调用sync API，触发从GitLab拉取最新数据
-      await api.post(`/api/gitlab/projects/${project.id}/sync`);
-      console.log('后端数据同步完成');
+      console.log('触发后端数据同步...');
+      const syncResponse = await api.post(`/api/gitlab/projects/${project.id}/sync`, {}, {
+        params: { _t: timestamp },
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      console.log('后端数据同步完成:', syncResponse.data);
       
-      // 数据同步完成后，等待一小段时间确保文件系统操作完成
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 数据同步完成后，等待一段时间确保文件系统操作完成
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // 重新加载分支数据
+      // 重新加载分支数据 - 添加缓存绕过参数
       console.log('重新加载分支数据...');
-      const branchResponse = await api.get(`/api/gitlab/projects/${project.id}/branches`);
+      const branchResponse = await api.get(`/api/gitlab/projects/${project.id}/branches`, {
+        params: { 
+          _t: timestamp + 1000,
+          refresh: 'true'
+        },
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       const branchData: BranchesResponse = branchResponse.data;
       
       // 更新分支状态
@@ -252,14 +271,20 @@ const ProjectDetail: React.FC = () => {
       console.log(`分支数据加载完成，共 ${branchData.branches.length} 个分支，默认分支: ${newSelectedBranch}`);
       
       // 再等待一小段时间，确保状态更新完成
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // 重新加载commit数据
+      // 重新加载commit数据 - 添加缓存绕过参数
       console.log('重新加载commit数据...');
       const commitResponse = await api.get(`/api/gitlab/projects/${project.id}/commits`, {
         params: {
           branch: newSelectedBranch,
-          all: 'true'
+          all: 'true',
+          _t: timestamp + 2000,
+          refresh: 'true'
+        },
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
       
@@ -268,6 +293,14 @@ const ProjectDetail: React.FC = () => {
       const commitsData = Array.isArray(responseData.commits) ? responseData.commits : [];
       
       console.log(`获取到 ${commitsData.length} 个commit记录`);
+      
+      // 显示最新几个commit的信息用于调试
+      if (commitsData.length > 0) {
+        console.log('最新的commit:');
+        commitsData.slice(0, 3).forEach((commit: any, index: number) => {
+          console.log(`  ${index + 1}. ${commit.short_id} - ${commit.author_name}: ${commit.message.substring(0, 50)}... (${commit.committed_date})`);
+        });
+      }
       
       // 更新用户映射关系
       if (responseData.userMappings) {
@@ -313,7 +346,31 @@ const ProjectDetail: React.FC = () => {
       setError(null);
       
       console.log(`数据刷新完成：${branchData.branches.length} 个分支，${formattedCommits.length} 个commit`);
-      message.success(`数据刷新完成${isFirstRefresh ? ' (首次初始化)' : ''}`);
+      
+      // 计算并显示今日新增的commit数量
+      const today = new Date().toDateString();
+      const todayCommits = formattedCommits.filter((commit: CommitReview) => {
+        const commitDate = new Date(commit.date);
+        return commitDate.toDateString() === today;
+      });
+      
+      const yesterdayDate = new Date();
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterday = yesterdayDate.toDateString();
+      const yesterdayCommits = formattedCommits.filter((commit: CommitReview) => {
+        const commitDate = new Date(commit.date);
+        return commitDate.toDateString() === yesterday;
+      });
+      
+      let successMessage = `数据刷新完成${isFirstRefresh ? ' (首次初始化)' : ''}`;
+      if (todayCommits.length > 0) {
+        successMessage += `，今日有 ${todayCommits.length} 个新commit`;
+      }
+      if (yesterdayCommits.length > 0) {
+        successMessage += `，昨日有 ${yesterdayCommits.length} 个commit`;
+      }
+      
+      message.success(successMessage);
       
     } catch (error: any) {
       console.error('刷新失败:', error);

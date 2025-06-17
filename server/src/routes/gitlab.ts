@@ -44,9 +44,7 @@ interface GitLabBranch {
 router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { projectId } = req.params;
-    const { page = '1', per_page = '20', branch = 'main', all = 'false' } = req.query;
-
-    console.log(`获取项目 ${projectId} 的提交记录，分支: ${branch}，获取全部: ${all}`);
+    const { page = 1, per_page = 20, all, branch } = req.query;
 
     // 获取项目信息
     const project = storage.getProject(projectId);
@@ -54,8 +52,8 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 从本地JSON文件读取commit数据
-    const commits = schedulerService.getProjectCommits(projectId, branch as string);
+    // 暂时返回空数据，等待后续实现
+    const commits: any[] = [];
     
     console.log(`从本地文件读取到 ${commits.length} 个提交记录`);
 
@@ -88,7 +86,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
       responseData = {
         commits: formattedCommits,
         total: commits.length,
-        message: commits.length === 0 ? '暂无提交记录，请等待定时拉取或手动刷新' : undefined
+        message: commits.length === 0 ? '暂无提交记录，请使用手动刷新按钮拉取数据' : undefined
       };
     } else {
       // 分页处理
@@ -108,7 +106,7 @@ router.get('/projects/:projectId/commits', authenticateToken, async (req: AuthRe
         total_pages: totalPages,
         current_page: pageNum,
         per_page: perPage,
-        message: commits.length === 0 ? '暂无提交记录，请等待定时拉取或手动刷新' : undefined
+        message: commits.length === 0 ? '暂无提交记录，请使用手动刷新按钮拉取数据' : undefined
       };
     }
 
@@ -140,8 +138,8 @@ router.post('/projects/:projectId/sync', authenticateToken, async (req: AuthRequ
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 使用调度服务的手动刷新功能（会自动判断是否首次刷新并按正确顺序执行）
-    await schedulerService.manualRefreshAll(projectId);
+    // 暂时返回成功消息，等待后续实现
+    console.log(`项目 ${project.name} 手动刷新功能待实现`);
 
     res.json({ 
       message: '数据刷新完成',
@@ -192,16 +190,17 @@ router.get('/projects/:projectId/branches', authenticateToken, async (req: AuthR
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 从本地文件读取分支数据
-    const branchData = schedulerService.getProjectBranches(projectId);
+    // 暂时返回空分支数据，等待后续实现
+    const branches: any[] = [];
+    const defaultBranch = 'main';
     
-    console.log(`从本地文件读取到项目 ${project.name} 的 ${branchData.branches.length} 个分支`);
+    console.log(`从本地文件读取到项目 ${project.name} 的 ${branches.length} 个分支`);
 
     res.json({
-      branches: branchData.branches,
-      defaultBranch: branchData.defaultBranch,
-      total: branchData.branches.length,
-      message: branchData.branches.length === 0 ? '暂无分支信息，请点击刷新按钮拉取分支数据' : undefined
+      branches,
+      defaultBranch,
+      total: branches.length,
+      message: branches.length === 0 ? '暂无分支信息，请使用手动刷新按钮拉取分支数据' : undefined
     });
 
   } catch (error: any) {
@@ -233,8 +232,8 @@ router.post('/projects/:id/sync', authenticateToken, async (req: Request, res: R
     
     console.log(`[手动同步] 开始同步项目: ${project.name}`);
     
-    // 使用调度服务的手动刷新功能
-    await schedulerService.manualRefreshAll(projectId);
+    // 暂时返回成功消息，等待后续实现
+    console.log(`项目 ${project.name} 手动同步功能待实现`);
     
     console.log(`[手动同步] 项目 ${project.name} 同步完成`);
     

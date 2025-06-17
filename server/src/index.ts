@@ -52,37 +52,31 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 const server = app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
   console.log(`健康检查: http://localhost:${PORT}/health`);
+  console.log('🔄 仅支持手动全量刷新，已移除自动定时任务');
   
-  // 根据项目配置设置刷新频率
+  // 显示项目配置信息
   try {
     const projects = projectStorage.findAll().filter((p: any) => !p.deletedAt && p.isActive !== false);
     if (projects.length > 0) {
-      // 使用所有项目中最小的刷新频率，确保所有项目都能及时更新
-      const minRefreshInterval = Math.min(...projects.map((p: any) => p.refreshInterval || 1));
-      console.log(`检测到 ${projects.length} 个项目，设置刷新频率为 ${minRefreshInterval} 分钟`);
-      schedulerService.setRefreshInterval(minRefreshInterval);
+      console.log(`📋 检测到 ${projects.length} 个活跃项目`);
+      projects.forEach((project: any, index: number) => {
+        console.log(`   ${index + 1}. ${project.name} (审核范围: ${project.reviewDays || 30} 天)`);
+      });
     } else {
-      console.log('暂无项目配置，使用默认刷新频率 1 分钟');
-      schedulerService.setRefreshInterval(1);
+      console.log('⚠️  暂无活跃项目配置');
     }
   } catch (error) {
-    console.error('设置刷新频率失败，使用默认值:', error);
-    schedulerService.setRefreshInterval(1);
+    console.error('读取项目配置失败:', error);
   }
-  
-  // 启动定时任务
-  schedulerService.startAll();
 });
 
 // 优雅关闭
 process.on('SIGTERM', () => {
   console.log('收到SIGTERM信号，正在关闭服务器...');
-  schedulerService.stopAll();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('收到SIGINT信号，正在关闭服务器...');
-  schedulerService.stopAll();
   process.exit(0);
 }); 
