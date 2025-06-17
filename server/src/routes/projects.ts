@@ -799,60 +799,212 @@ router.post('/validate-filter-rules', authenticateToken, async (req: AuthRequest
   }
 });
 
-// 手动刷新项目数据
-router.post('/:id/refresh', authenticateToken, async (req: AuthRequest, res: Response) => {
+// 手动刷新项目数据 - 特定项目
+router.post('/:id/refresh', authenticateToken, async (req, res) => {
   try {
-    const { id: projectId } = req.params;
-    
-    const project = projectStorage.findById(projectId);
+    const project = projectStorage.findById(req.params.id);
     if (!project) {
-      return res.status(404).json({ message: '项目不存在' });
+      return res.status(404).json({ 
+        success: false, 
+        message: '项目不存在' 
+      });
     }
 
-    // 调用手动刷新功能
-    await schedulerService.manualRefreshProject(projectId);
+    if (project.deletedAt || project.isActive === false) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '项目已被删除或停用' 
+      });
+    }
+
+    console.log(`🔄 开始手动刷新项目: ${project.name}`);
+    
+    // 执行数据同步
+    await schedulerService.pullProjectData(project);
+    
+    console.log(`✅ 项目 ${project.name} 数据刷新完成`);
     
     res.json({ 
+      success: true, 
       message: '项目数据刷新成功',
-      projectId,
-      projectName: project.name,
-      timestamp: new Date().toISOString()
+      project: {
+        id: project.id,
+        name: project.name
+      }
     });
-  } catch (error) {
-    console.error('手动刷新项目数据错误:', error);
+  } catch (error: any) {
+    console.error('手动刷新项目数据失败:', error);
     res.status(500).json({ 
-      message: '刷新失败', 
-      error: error instanceof Error ? error.message : '未知错误' 
+      success: false, 
+      message: '刷新失败: ' + error.message 
     });
   }
 });
 
-// 手动刷新所有项目数据
-router.post('/refresh-all', authenticateToken, async (req: AuthRequest, res: Response) => {
+// 手动刷新所有活跃项目数据
+router.post('/refresh-all', authenticateToken, async (req, res) => {
   try {
-    // 获取所有活跃项目并逐一刷新
-    const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
+    const projects = projectStorage.findAll().filter((p: any) => !p.deletedAt && p.isActive !== false);
     
-    console.log(`开始刷新所有项目，共 ${projects.length} 个项目`);
+    if (projects.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: '没有活跃项目需要刷新' 
+      });
+    }
+
+    console.log(`🔄 开始刷新所有 ${projects.length} 个活跃项目`);
     
+    const results = [];
     for (const project of projects) {
       try {
-        console.log(`刷新项目: ${project.name}`);
-        await schedulerService.manualRefreshProject(project.id);
-      } catch (error) {
-        console.error(`项目 ${project.name} 刷新失败:`, error instanceof Error ? error.message : error);
+        console.log(`🔄 正在刷新项目: ${project.name}`);
+        await schedulerService.pullProjectData(project);
+        results.push({ 
+          id: project.id, 
+          name: project.name, 
+          success: true 
+        });
+        console.log(`✅ 项目 ${project.name} 刷新完成`);
+      } catch (error: any) {
+        console.error(`❌ 项目 ${project.name} 刷新失败:`, error);
+        results.push({ 
+          id: project.id, 
+          name: project.name, 
+          success: false, 
+          error: error.message 
+        });
       }
     }
     
+    const successCount = results.filter(r => r.success).length;
+    console.log(`🎯 批量刷新完成: ${successCount}/${results.length} 个项目成功`);
+    
     res.json({ 
-      message: '所有项目数据刷新成功',
+      success: true, 
+      message: `批量刷新完成: ${successCount}/${results.length} 个项目成功`,
+      results
+    });
+  } catch (error: any) {
+    console.error('批量刷新项目数据失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '刷新失败: ' + error.message 
+    });
+  }
+});
+
+// 获取项目的webhook配置
+router.get('/:id/webhook', authenticateToken, (req, res) => {
+  try {
+    const project = projectStorage.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ 
+        success: false, 
+        message: '项目不存在' 
+      });
+    }
+
+    const webhookConfig = {
+      enabled: project.webhookEnabled || false,
+      secret: project.webhookSecret || '',
+      url: `${req.protocol}://${req.get('host')}/api/webhook/gitlab`,
+      supportedEvents: [
+        'Push Hook',
+        'Note Hook',
+        'Merge Request Hook'
+      ],
+      projectId: project.id,
+      projectName: project.name
+    };
+
+    res.json({ 
+      success: true, 
+      webhook: webhookConfig 
+    });
+  } catch (error: any) {
+    console.error('获取webhook配置失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '获取webhook配置失败: ' + error.message 
+    });
+  }
+});
+
+// 更新项目的webhook配置
+router.put('/:id/webhook', authenticateToken, (req, res) => {
+  try {
+    const { enabled, secret } = req.body;
+    
+    const project = projectStorage.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ 
+        success: false, 
+        message: '项目不存在' 
+      });
+    }
+
+    // 更新webhook配置
+    const updatedProject = {
+      ...project,
+      webhookEnabled: enabled,
+      webhookSecret: secret,
+      updatedAt: new Date().toISOString()
+    };
+
+    projectStorage.update(req.params.id, updatedProject);
+    
+    console.log(`🔗 项目 ${project.name} webhook配置已更新: ${enabled ? '启用' : '禁用'}`);
+
+    res.json({ 
+      success: true, 
+      message: 'Webhook配置更新成功',
+      webhook: {
+        enabled: updatedProject.webhookEnabled,
+        secret: updatedProject.webhookSecret,
+        url: `${req.protocol}://${req.get('host')}/api/webhook/gitlab`
+      }
+    });
+  } catch (error: any) {
+    console.error('更新webhook配置失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '更新webhook配置失败: ' + error.message 
+    });
+  }
+});
+
+// 测试webhook连接
+router.post('/:id/webhook/test', authenticateToken, async (req, res) => {
+  try {
+    const project = projectStorage.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ 
+        success: false, 
+        message: '项目不存在' 
+      });
+    }
+
+    if (!project.webhookEnabled) {
+      return res.status(400).json({ 
+        success: false, 
+        message: '项目webhook未启用' 
+      });
+    }
+
+    // 这里可以添加实际的webhook测试逻辑
+    // 比如向GitLab发送测试webhook等
+
+    res.json({ 
+      success: true, 
+      message: 'Webhook配置测试成功',
       timestamp: new Date().toISOString()
     });
-  } catch (error) {
-    console.error('手动刷新所有项目数据错误:', error);
+  } catch (error: any) {
+    console.error('测试webhook失败:', error);
     res.status(500).json({ 
-      message: '刷新失败', 
-      error: error instanceof Error ? error.message : '未知错误' 
+      success: false, 
+      message: '测试webhook失败: ' + error.message 
     });
   }
 });

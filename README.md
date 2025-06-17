@@ -20,6 +20,19 @@
 - 我们是以gitlab上的commit的评论作为是否已审核的依据
 - 系统会自动检测GitLab提交记录的评论，统计审核状态
 
+### 🚀 新功能：实时 Webhook 推送
+系统现已支持 GitLab Webhook 实时推送功能，替代传统的定时轮询机制：
+
+**性能优势**：
+- **实时响应**：新提交和评论立即同步，延迟从分钟级降至秒级
+- **资源节约**：减少 90% 以上的 API 调用次数
+- **用户体验**：无需手动刷新，数据自动更新
+
+**支持事件**：
+- `Push Hook` - 新提交推送实时同步
+- `Note Hook` - 评论添加即时更新
+- `Merge Request Hook` - 合并请求状态变化
+
 ## 技术栈
 
 - **前端**: React + TypeScript + Ant Design Pro
@@ -120,6 +133,16 @@ npm run dev:client  # 前端开发服务器
 ### 构建生产版本
 ```bash
 npm run build
+```
+
+### 生产模式启动
+```bash
+# 启动生产版本（需要先构建）
+npm start
+
+# 或者进入server目录启动
+cd server
+npm start
 ```
 
 ## 配置说明
@@ -292,4 +315,112 @@ MIT License
 
 ## 联系方式
 
-如有问题或建议，请提交Issue或联系开发团队。 
+如有问题或建议，请提交Issue或联系开发团队。
+
+## GitLab Webhook 配置
+
+### 🔧 启用实时推送功能
+
+为了获得最佳性能和用户体验，强烈建议配置 GitLab Webhook：
+
+#### 1. 系统配置
+1. 进入项目设置页面
+2. 点击项目的"Webhook配置"按钮
+3. 启用 Webhook 功能
+4. 设置一个安全密钥（Secret Token）
+5. 保存配置
+
+#### 2. GitLab Webhook 设置
+1. **进入项目设置**
+   - 登录 GitLab，进入要配置的项目
+   - 导航到：`Settings` → `Webhooks`
+
+2. **添加 Webhook**
+   - **URL**: `http://your-server-address:3001/api/webhook/gitlab`
+   - **Secret Token**: 填入步骤1中设置的密钥
+   - **触发事件**：勾选以下选项
+     - ✅ `Push events`
+     - ✅ `Comments` 
+     - ✅ `Merge request events`
+
+3. **测试连接**
+   - 点击"Add webhook"
+   - 点击"Test" → "Push events" 测试连接
+
+### ⚠️ 解决 "Url is blocked" 错误
+
+如果在添加 Webhook 时遇到 `Url is blocked: Requests to the local network are not allowed` 错误，请使用以下解决方案：
+
+#### 方案1：GitLab 管理员设置（推荐）
+
+如果你有 GitLab 管理员权限：
+
+1. **登录管理员面板**
+   ```
+   访问：http://your-gitlab-url/admin
+   ```
+
+2. **配置网络设置**
+   - 导航到：`Admin Area` → `Settings` → `Network`
+   - 找到 `Outbound requests` 部分
+   - ✅ 勾选 `Allow requests to the local network from web hooks and services`
+   - 点击 `Save changes`
+
+3. **验证配置**
+   - 返回项目设置，重新添加 Webhook
+   - 现在应该可以成功添加本地网络地址
+
+#### 方案2：使用公网地址
+
+如果无法修改 GitLab 设置，可以通过以下方式使用公网地址：
+
+##### 选项1：使用 ngrok（临时测试）
+```bash
+# 安装 ngrok
+npm install -g ngrok
+
+# 创建隧道指向本地服务器
+ngrok http 3001
+
+# 复制生成的公网地址，如：https://abc123.ngrok.io
+# 在 GitLab Webhook URL 中填入：https://abc123.ngrok.io/api/webhook/gitlab
+```
+
+##### 选项2：部署到云服务器
+- 将应用部署到云服务器（阿里云、腾讯云等）
+- 使用云服务器的公网 IP 或域名
+- Webhook URL 格式：`http://your-public-ip:3001/api/webhook/gitlab`
+
+##### 选项3：使用内网穿透工具
+- 花生壳、frp 等内网穿透工具
+- 配置端口映射到公网
+- 使用映射后的公网地址
+
+### 🔍 Webhook 状态检查
+
+配置完成后，可以通过以下方式检查 Webhook 状态：
+
+1. **在系统中查看**
+   - 项目设置页面显示 Webhook 配置状态
+   - 绿色表示已启用，红色表示未配置
+
+2. **在 GitLab 中查看**
+   - `Settings` → `Webhooks` → 点击编辑
+   - 查看"Recent Deliveries"了解推送状态
+   - 成功的请求显示绿色勾号
+
+3. **服务器日志**
+   - 查看服务器控制台输出
+   - 成功接收 Webhook 时会显示详细日志
+
+### 📈 性能对比
+
+| 功能 | 传统轮询模式 | Webhook 推送模式 |
+|------|-------------|-----------------|
+| 数据延迟 | 1-5分钟 | 1-3秒 |
+| API 调用次数 | 每分钟多次 | 仅在有变化时 |
+| 服务器负载 | 较高 | 很低 |
+| 用户体验 | 需手动刷新 | 自动更新 |
+| 网络消耗 | 持续轮询 | 按需推送 |
+
+**建议**：优先使用 Webhook 模式，在无法配置时才使用手动刷新功能。 

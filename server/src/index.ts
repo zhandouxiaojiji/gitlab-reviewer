@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
 import reviewRoutes from './routes/reviews';
 import gitlabRoutes from './routes/gitlab';
+import webhookRoutes from './routes/webhook';
 import { authenticateToken } from './middleware/auth';
 import { GitlabUserService } from './services/gitlabUserService';
 import schedulerService from './services/schedulerService';
@@ -18,9 +20,18 @@ const PORT = process.env.PORT || 3001;
 
 // 中间件
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 静态文件服务
+app.use(express.static(path.join(__dirname, '../../client/build')));
+
+// 解析JSON数据 - webhook路由需要原始数据，所以放在特定路由之前
+app.use('/api/webhook', webhookRoutes);
 
 // 路由
 app.use('/api/auth', authRoutes);
@@ -30,16 +41,12 @@ app.use('/api/gitlab', gitlabRoutes);
 
 // 健康检查
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// 404处理
-app.use('*', (req, res) => {
-  res.status(404).json({ message: '接口不存在' });
+// 前端路由处理（SPA）
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/build/index.html'));
 });
 
 // 错误处理中间件
@@ -52,6 +59,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 const server = app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
   console.log(`健康检查: http://localhost:${PORT}/health`);
+  console.log(`Webhook端点: http://localhost:${PORT}/api/webhook/gitlab`);
   console.log('🔄 仅支持手动全量刷新，已移除自动定时任务');
   
   // 显示项目配置信息

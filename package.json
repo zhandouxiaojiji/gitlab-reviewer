@@ -4,13 +4,16 @@
   "description": "GitLab代码review辅助工具",
   "main": "index.js",
   "scripts": {
+    "start": "cd server && npm start",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm start",
     "build": "npm run build:client && npm run build:server",
     "build:client": "cd client && npm run build",
     "build:server": "cd server && npm run build",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "clean": "cd client && npm run build && cd ../server && npm run build",
+    "test": "cd server && npm test"
   },
   "keywords": ["gitlab", "code-review", "react", "nodejs"],
   "author": "",

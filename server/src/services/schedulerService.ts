@@ -106,7 +106,7 @@ class SchedulerService {
   }
 
   // 拉取单个项目的完整数据
-  private async pullProjectData(project: any): Promise<void> {
+  public async pullProjectData(project: any): Promise<void> {
     const projectCache: ProjectCache = {
       projectId: project.id,
       projectName: project.name,
@@ -427,6 +427,190 @@ class SchedulerService {
       totalCommits,
       totalBranches
     };
+  }
+
+  // 增量更新commit数据（通过webhook触发）
+  public async incrementalUpdateCommits(projectId: string, newCommits: any[], branch: string): Promise<void> {
+    try {
+      const project = projectStorage.findById(projectId);
+      if (!project) {
+        throw new Error(`项目 ${projectId} 不存在`);
+      }
+
+      const cache = this.memoryCache.get(projectId);
+      if (!cache) {
+        console.log(`⚠️  项目 ${projectId} 缓存不存在，执行全量刷新`);
+        await this.manualRefreshProject(projectId);
+        return;
+      }
+
+      // 只处理默认分支的commit
+      if (branch !== cache.defaultBranch) {
+        console.log(`ℹ️  跳过非默认分支 ${branch} 的commit更新`);
+        return;
+      }
+
+      console.log(`🔄 增量更新项目 ${project.name} 的commit数据...`);
+
+      // 处理新的commit数据
+      const processedCommits = newCommits.map((commit: any) => {
+        const skipReview = shouldSkipReview(commit.message || '', project.filterRules || '');
+        return {
+          id: commit.id,
+          short_id: commit.id.substring(0, 8),
+          message: commit.message || '',
+          author_name: commit.author?.name || commit.author_name || '',
+          author_email: commit.author?.email || commit.author_email || '',
+          committed_date: commit.timestamp || commit.committed_date || new Date().toISOString(),
+          web_url: commit.url || `${project.gitlabUrl}/${project.name}/-/commit/${commit.id}`,
+          has_comments: false,
+          comments_count: 0,
+          skip_review: skipReview,
+          comments: [],
+          needsReview: !skipReview,
+          branch: cache.defaultBranch
+        };
+      });
+
+      // 检查是否已存在，避免重复
+      const existingCommitIds = new Set(cache.commits.map(c => c.id));
+      const newUniqueCommits = processedCommits.filter(c => !existingCommitIds.has(c.id));
+
+      if (newUniqueCommits.length > 0) {
+        // 添加新commit到缓存前端
+        cache.commits.unshift(...newUniqueCommits);
+
+        // 按时间重新排序
+        cache.commits.sort((a, b) => {
+          const timeA = new Date(a.committed_date).getTime();
+          const timeB = new Date(b.committed_date).getTime();
+          return timeB - timeA;
+        });
+
+        // 更新缓存时间戳
+        cache.lastUpdateTime = new Date().toISOString();
+
+        console.log(`✅ 增量添加 ${newUniqueCommits.length} 个新commit`);
+
+        // 为新的需要审核的commit拉取评论
+        const newNeedsReviewCommits = newUniqueCommits.filter(c => c.needsReview);
+        if (newNeedsReviewCommits.length > 0) {
+          console.log(`💬 为 ${newNeedsReviewCommits.length} 个新commit拉取评论...`);
+          await this.pullCommentsForSpecificCommits(project, cache, newNeedsReviewCommits);
+        }
+      } else {
+        console.log(`ℹ️  没有新的commit需要添加`);
+      }
+
+    } catch (error) {
+      console.error(`❌ 增量更新commit失败:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  // 增量更新特定commit的评论（通过webhook触发）
+  public async incrementalUpdateCommitComments(projectId: string, commitId: string): Promise<void> {
+    try {
+      const project = projectStorage.findById(projectId);
+      if (!project) {
+        throw new Error(`项目 ${projectId} 不存在`);
+      }
+
+      const cache = this.memoryCache.get(projectId);
+      if (!cache) {
+        console.log(`⚠️  项目 ${projectId} 缓存不存在，跳过评论更新`);
+        return;
+      }
+
+      // 查找对应的commit
+      const commit = cache.commits.find(c => c.id === commitId);
+      if (!commit) {
+        console.log(`⚠️  在缓存中未找到commit ${commitId.substring(0, 8)}`);
+        return;
+      }
+
+      console.log(`💬 更新commit ${commit.short_id} 的评论...`);
+
+      // 拉取该commit的最新评论
+      const cleanGitlabUrl = project.gitlabUrl.replace(/\/$/, '');
+      const projectIdentifier = encodeURIComponent(project.name);
+      const commentsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits/${commitId}/comments`;
+
+      const response = await axios.get(commentsUrl, {
+        headers: {
+          'Authorization': `Bearer ${project.accessToken}`,
+          'Accept': 'application/json'
+        },
+        timeout: 5000
+      });
+
+      const comments = response.data;
+
+      // 更新commit的评论信息
+      commit.comments = comments.map((comment: any) => ({
+        author: comment.author,
+        created_at: comment.created_at,
+        note: comment.note
+      }));
+
+      commit.has_comments = comments.length > 0;
+      commit.comments_count = comments.length;
+
+      // 更新缓存时间戳
+      cache.lastUpdateTime = new Date().toISOString();
+
+      const reviewers = [...new Set(comments.map((c: any) => c.author?.username).filter(Boolean))];
+      console.log(`✅ 评论更新完成: ${comments.length} 条评论，审核人: ${reviewers.join(', ')}`);
+
+    } catch (error) {
+      console.error(`❌ 增量更新评论失败:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  // 为特定commit拉取评论（辅助方法）
+  private async pullCommentsForSpecificCommits(project: any, cache: ProjectCache, commits: CommitData[]): Promise<void> {
+    try {
+      const cleanGitlabUrl = project.gitlabUrl.replace(/\/$/, '');
+      const projectIdentifier = encodeURIComponent(project.name);
+
+      for (const commit of commits) {
+        try {
+          const commentsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits/${commit.id}/comments`;
+          const response = await axios.get(commentsUrl, {
+            headers: {
+              'Authorization': `Bearer ${project.accessToken}`,
+              'Accept': 'application/json'
+            },
+            timeout: 5000
+          });
+
+          const comments = response.data;
+
+          // 更新commit的评论信息
+          commit.comments = comments.map((comment: any) => ({
+            author: comment.author,
+            created_at: comment.created_at,
+            note: comment.note
+          }));
+
+          commit.has_comments = comments.length > 0;
+          commit.comments_count = comments.length;
+
+          if (comments.length > 0) {
+            const reviewers = [...new Set(comments.map((c: any) => c.author?.username).filter(Boolean))];
+            console.log(`      ✅ ${commit.short_id}: ${comments.length} 条评论，审核人: ${reviewers.join(', ')}`);
+          }
+
+        } catch (error) {
+          console.warn(`      ⚠️  获取 ${commit.short_id} 评论失败:`, error instanceof Error ? error.message : error);
+        }
+
+        // 添加延时避免API限流
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+    } catch (error) {
+      console.error(`❌ 拉取特定commit评论失败:`, error instanceof Error ? error.message : error);
+    }
   }
 
   // 获取全局锁
