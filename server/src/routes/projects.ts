@@ -26,16 +26,11 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // 创建新项目
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules, refreshInterval } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
-    }
-
-    // 验证刷新频率
-    if (refreshInterval !== undefined && (refreshInterval < 1 || refreshInterval > 60)) {
-      return res.status(400).json({ message: '刷新频率必须在1-60分钟之间' });
     }
 
     // 生成项目ID（基于GitLab URL + 项目名称）
@@ -69,7 +64,6 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       reviewDays: reviewDays || 7, // 审核范围默认7天
       maxCommits: maxCommits || 100, // 拉取记录上限默认100条
       filterRules: filterRules || '', // 过滤规则
-      refreshInterval: refreshInterval || 1, // 刷新频率默认1分钟
       isActive: true,
       createdBy: req.user.id
     });
@@ -95,16 +89,11 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { id: projectId } = req.params;
-    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules, refreshInterval } = req.body;
+    const { name, gitlabUrl, accessToken, description, reviewers, reviewDays, maxCommits, filterRules } = req.body;
 
     // 验证必填字段
     if (!name || !gitlabUrl || !accessToken) {
       return res.status(400).json({ message: '项目名称、GitLab地址和访问令牌为必填项' });
-    }
-
-    // 验证刷新频率
-    if (refreshInterval !== undefined && (refreshInterval < 1 || refreshInterval > 60)) {
-      return res.status(400).json({ message: '刷新频率必须在1-60分钟之间' });
     }
 
     // 检查项目是否存在
@@ -147,7 +136,6 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
         maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
         filterRules: filterRules !== undefined ? filterRules : (existingProject.filterRules || ''),
-        refreshInterval: refreshInterval !== undefined ? refreshInterval : (existingProject.refreshInterval || 1),
         userMappings: existingProject.userMappings || {},
         isActive: true,
         createdBy: existingProject.createdBy,
@@ -179,7 +167,6 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         reviewDays: reviewDays !== undefined ? reviewDays : (existingProject.reviewDays || 7),
         maxCommits: maxCommits !== undefined ? maxCommits : (existingProject.maxCommits || 100),
         filterRules: filterRules !== undefined ? filterRules : (existingProject.filterRules || ''),
-        refreshInterval: refreshInterval !== undefined ? refreshInterval : (existingProject.refreshInterval || 1),
         updatedAt: new Date().toISOString()
       });
 

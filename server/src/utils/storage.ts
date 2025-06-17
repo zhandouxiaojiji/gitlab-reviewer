@@ -86,7 +86,6 @@ export const projectStorage = {
       reviewDays: projectData.reviewDays || 7,
       maxCommits: projectData.maxCommits || 100,
       filterRules: projectData.filterRules || '',
-      refreshInterval: projectData.refreshInterval || 1, // 刷新频率（分钟），默认1分钟
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

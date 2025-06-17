@@ -38,7 +38,6 @@ interface GitLabProject {
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   reviewDays?: number; // 审核范围（天数），默认7天
   filterRules?: string; // 过滤规则（正则表达式），匹配到的commit无需审查
-  refreshInterval?: number; // 刷新频率（分钟），默认1分钟
   createdAt: string;
 }
 
@@ -104,8 +103,7 @@ const Settings: React.FC = () => {
     form.setFieldsValue({
       ...project,
       reviewers: project.reviewers || [],
-      reviewDays: project.reviewDays || 7,
-      refreshInterval: project.refreshInterval || 1
+      reviewDays: project.reviewDays || 7
     });
     // 加载项目用户列表
     loadProjectUsers(project);
@@ -202,10 +200,6 @@ const Settings: React.FC = () => {
           <div style={{ marginBottom: '4px' }}>
             <Text strong>审核范围: </Text>
             <Tag color="blue">{record.reviewDays || 7} 天</Tag>
-          </div>
-          <div style={{ marginBottom: '4px' }}>
-            <Text strong>刷新频率: </Text>
-            <Tag color="orange">{record.refreshInterval || 1} 分钟</Tag>
           </div>
           <div>
             <Text strong>审核人员: </Text>
@@ -371,22 +365,6 @@ const Settings: React.FC = () => {
               max={365}
               suffix="天"
               placeholder="请输入天数"
-              style={{ width: '200px' }}
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="刷新频率"
-            name="refreshInterval"
-            help="自动拉取数据的频率，默认1分钟"
-            initialValue={1}
-          >
-            <Input
-              type="number"
-              min={1}
-              max={60}
-              suffix="分钟"
-              placeholder="请输入刷新频率"
               style={{ width: '200px' }}
             />
           </Form.Item>

@@ -23,7 +23,6 @@ interface GitLabProject {
   reviewers?: string[]; // 审核人员用户名列表
   userMappings?: { [username: string]: string }; // 用户名到昵称的映射
   reviewDays?: number; // 审核范围（天数），默认7天
-  refreshInterval?: number; // 刷新频率（分钟），默认1分钟
   createdAt: string;
 }
 
