@@ -351,7 +351,7 @@ class SchedulerService {
         const progress = `${i + 1}/${needsReviewCommits.length}`;
         
         try {
-          console.log(`🔍 [${project.name}] (${progress}) 拉取 ${commit.short_id} 的评论...`);
+          // console.log(`🔍 [${project.name}] (${progress}) 拉取 ${commit.short_id} 的评论...`);
           
           const commentsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits/${commit.id}/comments`;
           const commentsResponse = await axios.get(commentsUrl, {
@@ -397,11 +397,12 @@ class SchedulerService {
             const reviewerNames = reviewers.join(', ');
             console.log(`   ✅ [${project.name}] (${progress}) ${commit.short_id}: ${comments.length} 条评论，审核人: ${reviewerNames}`);
           } else {
-            console.log(`   📝 [${project.name}] (${progress}) ${commit.short_id}: 暂无评论`);
+            // console.log(`   📝 [${project.name}] (${progress}) ${commit.short_id}: 暂无评论`);
           }
           
         } catch (error) {
-          console.warn(`   ❌ [${project.name}] (${progress}) 获取 ${commit.short_id} 评论失败:`, error instanceof Error ? error.message : error);
+          console.warn(`   ❌ [${project.name}] (${progress}) 获取 ${commit.short_id} 评论失败:`,
+             error instanceof Error ? error.message : error);
         }
         
         // 添加适当延时，避免API限流
