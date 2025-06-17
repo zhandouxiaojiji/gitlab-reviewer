@@ -24,14 +24,16 @@ app.use(cors({
   origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // 静态文件服务
 app.use(express.static(path.join(__dirname, '../../client/build')));
 
-// 解析JSON数据 - webhook路由需要原始数据，所以放在特定路由之前
+// 重要：webhook路由必须在express.json()之前，因为需要原始数据
 app.use('/api/webhook', webhookRoutes);
+
+// 其他路由使用JSON解析
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 路由
 app.use('/api/auth', authRoutes);

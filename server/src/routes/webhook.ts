@@ -20,20 +20,41 @@ const verifyWebhookSignature = (payload: string, signature: string, secret: stri
 };
 
 // GitLab Webhook接收端点
-router.post('/gitlab', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
+router.post('/gitlab', express.raw({ type: 'application/json', limit: '50mb' }), async (req: Request, res: Response) => {
   try {
-    const payload = req.body.toString('utf8');
+    // 获取请求头信息
     const signature = req.headers['x-gitlab-token'] as string;
     const event = req.headers['x-gitlab-event'] as string;
     
     console.log(`🔔 收到GitLab Webhook: ${event}`);
     
-    // 解析payload
-    let data;
+    // 正确解析payload
+    let payload: string;
+    let data: any;
+    
     try {
-      data = JSON.parse(payload);
+      // req.body 是 Buffer，需要转为字符串
+      if (Buffer.isBuffer(req.body)) {
+        payload = req.body.toString('utf8');
+      } else if (typeof req.body === 'string') {
+        payload = req.body;
+      } else if (typeof req.body === 'object' && req.body !== null) {
+        // 如果已经是解析后的对象，直接使用
+        data = req.body;
+        payload = JSON.stringify(req.body);
+      } else {
+        throw new Error('无法识别的payload格式');
+      }
+      
+      // 如果还没有解析为对象，现在解析
+      if (!data) {
+        data = JSON.parse(payload);
+      }
+      
     } catch (error) {
       console.error('❌ Webhook payload解析失败:', error);
+      console.log('📊 Raw body type:', typeof req.body);
+      console.log('📊 Raw body content:', req.body?.toString?.().substring(0, 200) + '...');
       return res.status(400).json({ error: '无效的JSON格式' });
     }
     
