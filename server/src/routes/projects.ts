@@ -809,8 +809,8 @@ router.post('/:id/refresh', authenticateToken, async (req: AuthRequest, res: Res
       return res.status(404).json({ message: '项目不存在' });
     }
 
-    // 暂时返回成功消息，等待后续实现
-    console.log(`项目 ${project.name} 手动刷新功能待实现`);
+    // 调用手动刷新功能
+    await schedulerService.manualRefreshProject(projectId);
     
     res.json({ 
       message: '项目数据刷新成功',
@@ -830,8 +830,19 @@ router.post('/:id/refresh', authenticateToken, async (req: AuthRequest, res: Res
 // 手动刷新所有项目数据
 router.post('/refresh-all', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    // 暂时返回成功消息，等待后续实现
-    console.log(`所有项目手动刷新功能待实现`);
+    // 获取所有活跃项目并逐一刷新
+    const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
+    
+    console.log(`开始刷新所有项目，共 ${projects.length} 个项目`);
+    
+    for (const project of projects) {
+      try {
+        console.log(`刷新项目: ${project.name}`);
+        await schedulerService.manualRefreshProject(project.id);
+      } catch (error) {
+        console.error(`项目 ${project.name} 刷新失败:`, error instanceof Error ? error.message : error);
+      }
+    }
     
     res.json({ 
       message: '所有项目数据刷新成功',
