@@ -140,6 +140,13 @@ class SchedulerService {
       const projectIdentifier = encodeURIComponent(project.name);
       const branchesUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/branches`;
 
+      // 计算审核时间范围（与commit拉取保持一致）
+      const reviewDays = project.reviewDays || 30;
+      const reviewStartDate = new Date();
+      reviewStartDate.setDate(reviewStartDate.getDate() - (reviewDays - 1));
+      reviewStartDate.setHours(0, 0, 0, 0);
+      const reviewStartTime = reviewStartDate.getTime();
+
       const response = await axios.get(branchesUrl, {
         headers: {
           'Authorization': `Bearer ${project.accessToken}`,
@@ -151,8 +158,8 @@ class SchedulerService {
       const branches = response.data;
       console.log(`      📦 获取到 ${branches.length} 个分支`);
 
-      // 处理分支数据
-      cache.branches = branches.map((branch: any) => ({
+      // 处理分支数据并按审核时间范围过滤
+      const allBranches = branches.map((branch: any) => ({
         name: branch.name,
         default: branch.default || false,
         protected: branch.protected || false,
@@ -165,18 +172,34 @@ class SchedulerService {
         }
       }));
 
-      // 确定默认分支
-      const defaultBranchObj = cache.branches.find(b => b.default);
+      // 过滤：只保留最新提交在审核范围内的分支
+      const filteredBranches = allBranches.filter((branch: any) => {
+        const commitDate = new Date(branch.commit.committed_date);
+        const commitTime = commitDate.getTime();
+        const isInRange = commitTime >= reviewStartTime;
+        
+        if (!isInRange) {
+          console.log(`      🚫 过滤分支 ${branch.name}: 最新提交超出审核范围 (${commitDate.toLocaleDateString()})`);
+        }
+        
+        return isInRange;
+      });
+
+      cache.branches = filteredBranches;
+      console.log(`      ✅ 过滤后保留 ${filteredBranches.length} 个分支 (审核范围: ${reviewDays} 天)`);
+
+      // 确定默认分支（优先从过滤后的分支中选择）
+      const defaultBranchObj = cache.branches.find((b: BranchData) => b.default);
       if (defaultBranchObj) {
         cache.defaultBranch = defaultBranchObj.name;
         console.log(`      🔖 默认分支: ${cache.defaultBranch}`);
       } else {
-        // 按优先级查找常见的默认分支名称
+        // 按优先级查找常见的默认分支名称（仅在过滤后的分支中查找）
         const commonDefaultBranches = ['main', 'master', 'develop', 'dev'];
         let found = false;
         
         for (const commonBranch of commonDefaultBranches) {
-          const foundBranch = cache.branches.find(b => b.name.toLowerCase() === commonBranch.toLowerCase());
+          const foundBranch = cache.branches.find((b: BranchData) => b.name.toLowerCase() === commonBranch.toLowerCase());
           if (foundBranch) {
             cache.defaultBranch = foundBranch.name;
             console.log(`      🔖 使用常见默认分支: ${cache.defaultBranch}`);
@@ -188,6 +211,19 @@ class SchedulerService {
         if (!found && cache.branches.length > 0) {
           cache.defaultBranch = cache.branches[0].name;
           console.log(`      🔖 使用第一个分支: ${cache.defaultBranch}`);
+        } else if (!found) {
+          // 如果过滤后没有任何分支，回退到原始分支列表中查找
+          console.log(`      ⚠️  过滤后无可用分支，回退到完整分支列表`);
+          const fallbackDefault = allBranches.find((b: any) => b.default);
+          if (fallbackDefault) {
+            cache.defaultBranch = fallbackDefault.name;
+            cache.branches = [fallbackDefault]; // 至少保留默认分支
+            console.log(`      🔖 回退使用默认分支: ${cache.defaultBranch}`);
+          } else {
+            cache.defaultBranch = 'main';
+            cache.branches = [];
+            console.log(`      🔖 使用备用默认分支: main`);
+          }
         }
       }
 

@@ -246,10 +246,7 @@ const ProjectDetail: React.FC = () => {
       });
       console.log('后端数据同步完成:', syncResponse.data);
       
-      // 数据同步完成后，等待一段时间确保文件系统操作完成
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // 重新加载分支数据 - 添加缓存绕过参数
+      // 立即重新加载分支数据（内存缓存，无需等待）
       console.log('重新加载分支数据...');
       const branchResponse = await api.get(`/api/gitlab/projects/${project.id}/branches`, {
         params: { 
@@ -270,10 +267,7 @@ const ProjectDetail: React.FC = () => {
       
       console.log(`分支数据加载完成，共 ${branchData.branches.length} 个分支，默认分支: ${newSelectedBranch}`);
       
-      // 再等待一小段时间，确保状态更新完成
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // 重新加载commit数据 - 添加缓存绕过参数
+      // 立即重新加载commit数据（内存缓存，无需等待）
       console.log('重新加载commit数据...');
       const commitResponse = await api.get(`/api/gitlab/projects/${project.id}/commits`, {
         params: {
