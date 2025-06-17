@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Card, Button, Select, message, Spin, Tag, Typography, Space } from 'antd';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { ReloadOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
@@ -26,8 +26,8 @@ interface Project {
 }
 
 const CodeReview: React.FC = () => {
-  const { username } = useParams<{ username: string }>();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const username = searchParams.get('user');
   
   const [commits, setCommits] = useState<Commit[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

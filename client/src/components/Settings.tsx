@@ -10,7 +10,6 @@ import {
   Modal,
   Popconfirm,
   Typography,
-  Divider,
   Select,
   Tag
 } from 'antd';
@@ -24,7 +23,7 @@ import {
   UserOutlined
 } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import api, { getApiUrl } from '../services/api';
+import api from '../services/api';
 import MainLayout from './MainLayout';
 
 const { Title, Text } = Typography;

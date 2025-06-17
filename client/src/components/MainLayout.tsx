@@ -1,18 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Layout, Menu, Button, message, Typography } from 'antd';
 import { 
   DashboardOutlined, 
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
-  GitlabOutlined,
-  CodeOutlined
+  GitlabOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 
-const { Header, Sider, Content } = Layout;
+const { Sider, Content } = Layout;
 const { Text } = Typography;
 
 interface MainLayoutProps {
@@ -39,33 +38,19 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const projectName = searchParams.get('project');
   
   const [projects, setProjects] = useState<GitLabProject[]>([]);
-  const [loading, setLoading] = useState(false);
   const [userNickname, setUserNickname] = useState<string>('');
 
-  useEffect(() => {
-    // 如果URL中没有用户名参数，跳转到登录页
-    if (!username) {
-      navigate('/login');
-    } else {
-      loadProjects();
-      loadUserNickname();
-    }
-  }, [username, navigate]);
-
-  const loadProjects = async () => {
-    setLoading(true);
+  const loadProjects = useCallback(async () => {
     try {
       const response = await api.get('/api/projects');
       setProjects(response.data || []);
     } catch (error) {
       console.error('加载项目配置失败:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
 
   // 获取当前登录用户的昵称
-  const loadUserNickname = async () => {
+  const loadUserNickname = useCallback(async () => {
     try {
       if (!username) return;
       
@@ -76,8 +61,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       if (projects.length > 0) {
         const firstProject = projects[0];
         const response = await api.get(`/api/gitlab/projects/${firstProject.id}/users/${encodeURIComponent(username)}`);
-        if (response.data.user) {
-          setUserNickname(response.data.user.name || username);
+        if (response.data && response.data.name) {
+          setUserNickname(response.data.name);
         } else {
           setUserNickname(username);
         }
@@ -88,7 +73,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       console.warn('获取用户昵称失败:', error);
       setUserNickname(username || '');
     }
-  };
+  }, [username]);
+
+  useEffect(() => {
+    // 如果URL中没有用户名参数，跳转到登录页
+    if (!username) {
+      navigate('/login');
+    } else {
+      loadProjects();
+      loadUserNickname();
+    }
+  }, [username, navigate, loadProjects, loadUserNickname]);
 
   const handleLogout = () => {
     logout();
