@@ -128,12 +128,28 @@ class SchedulerService {
     return latestCommitDate.toISOString();
   }
 
-  // 拉取项目的新commit
-  private async pullProjectCommits(project: any): Promise<void> {
+  // 拉取项目的commit数据
+  private async pullProjectCommits(project: any, isManualRefresh: boolean = false): Promise<void> {
     try {
-      const projectData = this.readProjectCommitData(project.id);
-      const isFirstPull = projectData.commits.length === 0;
-      
+      if (isManualRefresh) {
+        console.log(`🔄 [${project.name}] 开始手动拉取commit数据...`);
+      } else {
+        console.log(`⏰ [${project.name}] 开始定时拉取commit数据...`);
+      }
+
+      // 读取现有数据
+      const existingData = this.readProjectCommitData(project.id);
+      const existingCommits = existingData.commits || [];
+      console.log(`📊 [${project.name}] 本地已有 ${existingCommits.length} 个commit记录`);
+
+      // 计算拉取的时间范围（总是使用审核范围）
+      const reviewDays = project.reviewDays || 30;
+      const reviewStartTime = new Date();
+      reviewStartTime.setDate(reviewStartTime.getDate() - reviewDays);
+      const reviewStartTimeISO = reviewStartTime.toISOString();
+
+      console.log(`📅 [${project.name}] 使用时间范围拉取确保获取最新commit: ${reviewStartTime.toLocaleDateString()} 至 ${new Date().toLocaleDateString()}`);
+
       // 获取项目的默认分支
       const branchData = this.readProjectBranchData(project.id);
       const defaultBranch = branchData.defaultBranch || 'main';
@@ -143,32 +159,15 @@ class SchedulerService {
       const projectIdentifier = encodeURIComponent(project.name);
       const commitsUrl = `${cleanGitlabUrl}/api/v4/projects/${projectIdentifier}/repository/commits`;
       
-      // 计算审核时间范围
-      const reviewDays = project.reviewDays || 30; // 默认30天
-      const reviewStartTime = new Date();
-      reviewStartTime.setDate(reviewStartTime.getDate() - reviewDays);
-      const reviewStartTimeISO = reviewStartTime.toISOString();
+      // 始终使用审核时间范围作为拉取起始时间
+      const pullSinceTime = reviewStartTimeISO;
+      const refreshMode = isManualRefresh ? '手动刷新' : '定时刷新';
       
-      // 确定拉取起始时间
-      let pullSinceTime: string;
-      if (isFirstPull) {
-        // 首次拉取：使用审核时间范围
-        pullSinceTime = reviewStartTimeISO;
-        console.log(`\n🚀 [${project.name}] 开始首次范围拉取commit数据...`);
-        console.log(`📋 [${project.name}] 目标分支: ${defaultBranch}`);
-        console.log(`📅 [${project.name}] 审核范围: ${reviewDays} 天`);
-        console.log(`⏰ [${project.name}] 拉取起始时间: ${reviewStartTime.toLocaleDateString()}`);
-      } else {
-        // 增量拉取：使用本地最新commit时间
-        const latestCommitTime = this.getLatestCommitTime(projectData.commits);
-        pullSinceTime = latestCommitTime || reviewStartTimeISO;
-        
-        const latestCommit = projectData.commits[0];
-        console.log(`\n🔄 [${project.name}] 开始增量拉取commit数据...`);
-        console.log(`📋 [${project.name}] 目标分支: ${defaultBranch}`);
-        console.log(`📌 [${project.name}] 本地最新: ${latestCommit.short_id} - ${latestCommit.message.substring(0, 30)}... (${latestCommit.committed_date})`);
-        console.log(`⏰ [${project.name}] 拉取起始时间: ${pullSinceTime}`);
-      }
+      console.log(`\n🚀 [${project.name}] 开始${refreshMode}commit数据...`);
+      console.log(`📋 [${project.name}] 目标分支: ${defaultBranch}`);
+      console.log(`📅 [${project.name}] 审核范围: ${reviewDays} 天`);
+      console.log(`⏰ [${project.name}] 拉取起始时间: ${reviewStartTime.toLocaleDateString()}`);
+      console.log(`🔄 [${project.name}] 拉取模式：基于时间范围，确保获取最新提交`);
       
       let allNewCommits: any[] = [];
       let page = 1;
@@ -187,7 +186,7 @@ class SchedulerService {
             per_page: perPage,
             page: page,
             ref_name: defaultBranch,
-            since: pullSinceTime // 所有拉取都使用时间范围限制
+            since: pullSinceTime // 始终使用审核时间范围
           };
           
           const response = await axios.get(commitsUrl, {
@@ -217,10 +216,10 @@ class SchedulerService {
             
             // 立即处理这一页的commit并保存
             let pageNewCount = 0;
-            let pageSkippedCount = 0;
+            let pageUpdatedCount = 0;
             
             for (const commit of pageCommits) {
-              const existingCommitIndex = projectData.commits.findIndex(c => c.id === commit.id);
+              const existingCommitIndex = existingCommits.findIndex(c => c.id === commit.id);
               
               if (existingCommitIndex === -1) {
                 // 新commit，添加到列表
@@ -241,7 +240,7 @@ class SchedulerService {
                   branch: defaultBranch // 添加分支信息
                 };
                 
-                projectData.commits.push(formattedCommit);
+                existingCommits.push(formattedCommit);
                 pageNewCount++;
                 
                 // 显示新增的commit
@@ -249,26 +248,43 @@ class SchedulerService {
                   console.log(`   ✨ [${project.name}] 新增: ${commit.short_id} - ${commit.author_name}: ${commit.message.substring(0, 40)}...`);
                 }
               } else {
-                pageSkippedCount++;
+                // commit已存在，更新其基本信息以确保数据最新
+                const skipReview = shouldSkipReview(commit.title || commit.message || '', project.filterRules || '');
+                const existingCommit = existingCommits[existingCommitIndex];
+                
+                // 保留评论数据，只更新基本信息
+                existingCommits[existingCommitIndex] = {
+                  ...existingCommit,
+                  message: commit.title || commit.message || '',
+                  author_name: commit.author_name,
+                  author_email: commit.author_email,
+                  committed_date: commit.committed_date,
+                  web_url: commit.web_url,
+                  skip_review: skipReview,
+                  needsReview: existingCommit.has_comments ? existingCommit.needsReview : !skipReview,
+                  branch: defaultBranch
+                };
+                pageUpdatedCount++;
               }
               processedCount++;
             }
             
-            // 如果有新commit，立即排序并保存
-            if (pageNewCount > 0) {
-              projectData.commits.sort((a, b) => {
-                const timeA = new Date(a.committed_date).getTime();
-                const timeB = new Date(b.committed_date).getTime();
-                return timeB - timeA; // 降序排列，最新的在前
-              });
-              
-              // 实时保存数据，让前端能立即访问
-              this.saveProjectCommitData(projectData);
-              console.log(`   💾 [${project.name}] 实时保存: 新增 ${pageNewCount} 条，总计 ${projectData.commits.length} 条`);
-            }
+            // 立即排序并保存
+            existingCommits.sort((a, b) => {
+              const timeA = new Date(a.committed_date).getTime();
+              const timeB = new Date(b.committed_date).getTime();
+              return timeB - timeA; // 降序排列，最新的在前
+            });
             
-            if (pageSkippedCount > 0 && pageSkippedCount <= 3) {
-              console.log(`   ⏭️  [${project.name}] 跳过已存在: ${pageSkippedCount} 条`);
+            // 实时保存数据，让前端能立即访问
+            this.saveProjectCommitData({
+              projectId: project.id,
+              lastCommentPullTime: new Date().toISOString(),
+              commits: existingCommits
+            });
+            
+            if (pageNewCount > 0 || pageUpdatedCount > 0) {
+              console.log(`   💾 [${project.name}] 实时保存: 新增 ${pageNewCount} 条，更新 ${pageUpdatedCount} 条，总计 ${existingCommits.length} 条`);
             }
             
             // 如果返回的数据少于每页数量，说明这是最后一页
@@ -286,17 +302,21 @@ class SchedulerService {
       }
 
       // 最终保存和统计
-      this.saveProjectCommitData(projectData);
+      this.saveProjectCommitData({
+        projectId: project.id,
+        lastCommentPullTime: new Date().toISOString(),
+        commits: existingCommits
+      });
       
-      console.log(`\n🎉 [${project.name}] Commit拉取完成!`);
+      console.log(`\n🎉 [${project.name}] Commit拉取完成! (${refreshMode})`);
       console.log(`   📊 API获取: ${totalFetched} 条`);
       console.log(`   📈 处理: ${processedCount} 条`);
-      console.log(`   📋 总计: ${projectData.commits.length} 条`);
+      console.log(`   📅 总计: ${existingCommits.length} 条`);
       console.log(`   📅 审核范围: ${reviewDays} 天`);
       
       // 显示最新的commit用于验证
-      if (projectData.commits.length > 0) {
-        const latestCommit = projectData.commits[0];
+      if (existingCommits.length > 0) {
+        const latestCommit = existingCommits[0];
         console.log(`   🔝 最新: ${latestCommit.short_id} - ${latestCommit.author_name}: ${latestCommit.message.substring(0, 50)}... (${latestCommit.committed_date})`);
       }
       
@@ -478,7 +498,7 @@ class SchedulerService {
       const projects = projectStorage.findAll().filter(p => !p.deletedAt && p.isActive !== false);
       
       for (const project of projects) {
-        await this.pullProjectCommits(project);
+        await this.pullProjectCommits(project, false); // 定时任务模式
       }
     } catch (error) {
       console.error('拉取所有项目commit失败:', error);
@@ -529,7 +549,7 @@ class SchedulerService {
   public async manualPullCommits(projectId: string): Promise<void> {
     const project = projectStorage.findById(projectId);
     if (project) {
-      await this.pullProjectCommits(project);
+      await this.pullProjectCommits(project, true); // 手动拉取模式
     }
   }
 
@@ -735,7 +755,7 @@ class SchedulerService {
             
             // 步骤2: 获取默认分支后拉取commit
             console.log(`📌 [${project.name}] 步骤2: 拉取commit数据...`);
-            await this.pullProjectCommits(project);
+            await this.pullProjectCommits(project, true); // 手动刷新标记
             
             // 步骤3: 拉取评论
             console.log(`📌 [${project.name}] 步骤3: 拉取评论数据...`);
@@ -743,10 +763,10 @@ class SchedulerService {
             
             console.log(`🎉 [${project.name}] 首次初始化完成！`);
           } else {
-            // 非首次刷新，可以并行执行
-            console.log(`🔄 [${project.name}] 执行增量刷新...`);
+            // 非首次刷新，并行执行
+            console.log(`🔄 [${project.name}] 执行手动刷新...`);
             await Promise.all([
-              this.pullProjectCommits(project),
+              this.pullProjectCommits(project, true), // 手动刷新标记
               this.pullCommitComments(project),
               this.pullProjectBranches(project)
             ]);
@@ -779,13 +799,13 @@ class SchedulerService {
               
               // 顺序执行：分支 -> commit -> 评论
               await this.pullProjectBranches(project);
-              await this.pullProjectCommits(project);
+              await this.pullProjectCommits(project, true); // 手动刷新标记
               await this.pullCommitComments(project);
             } else {
-              console.log(`🔄 [${project.name}] 执行增量刷新...`);
-              // 非首次可以并行执行
+              console.log(`🔄 [${project.name}] 执行手动刷新...`);
+              // 并行执行
               await Promise.all([
-                this.pullProjectCommits(project),
+                this.pullProjectCommits(project, true), // 手动刷新标记
                 this.pullCommitComments(project),
                 this.pullProjectBranches(project)
               ]);
