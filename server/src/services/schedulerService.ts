@@ -412,6 +412,13 @@ class SchedulerService {
     console.log(`✅ 项目 ${project.name} 手动刷新完成`);
   }
 
+  /**
+   * 获取项目缓存数据
+   */
+  public getProjectCache(projectId: string): ProjectCache | undefined {
+    return this.memoryCache.get(projectId);
+  }
+
   // 获取缓存统计信息
   public getCacheStats(): { projectCount: number, totalCommits: number, totalBranches: number } {
     let totalCommits = 0;

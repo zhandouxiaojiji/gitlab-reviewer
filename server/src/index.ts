@@ -8,9 +8,13 @@ import projectRoutes from './routes/projects';
 import reviewRoutes from './routes/reviews';
 import gitlabRoutes from './routes/gitlab';
 import webhookRoutes from './routes/webhook';
+import settingsRoutes from './routes/settings';
+import feishuRoutes from './routes/feishu';
+import scheduleRoutes from './routes/schedule';
 import { authenticateToken } from './middleware/auth';
 import { GitlabUserService } from './services/gitlabUserService';
 import schedulerService from './services/schedulerService';
+import { scheduledReportService } from './services/scheduledReportService';
 import { projectStorage } from './utils/storage';
 
 dotenv.config();
@@ -40,6 +44,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/gitlab', gitlabRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/feishu', feishuRoutes);
+app.use('/api/schedule', scheduleRoutes);
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -63,6 +70,10 @@ const server = app.listen(PORT, () => {
   console.log(`健康检查: http://localhost:${PORT}/health`);
   console.log(`Webhook端点: http://localhost:${PORT}/api/webhook/gitlab`);
   console.log('🔄 仅支持手动全量刷新，已移除自动定时任务');
+  
+  // 启动定时报告服务
+  scheduledReportService.start();
+  console.log('📅 定时报告服务已启动');
   
   // 显示项目配置信息
   try {

@@ -254,6 +254,32 @@ export const commitStorage = {
   }
 };
 
+// 全局配置文件
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+
+// 全局配置操作
+export const getGlobalConfig = (): any => {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = fs.readFileSync(CONFIG_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+    return {};
+  } catch (error) {
+    console.error('读取全局配置失败:', error);
+    return {};
+  }
+};
+
+export const setGlobalConfig = (config: any): void => {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+  } catch (error) {
+    console.error('写入全局配置失败:', error);
+    throw error;
+  }
+};
+
 // 统一的存储接口
 export const storage = {
   // 项目操作

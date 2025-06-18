@@ -4,6 +4,9 @@ import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Settings from './components/Settings';
+import ProjectSettings from './components/ProjectSettings';
+import FeishuSettings from './components/FeishuSettings';
+import ScheduleSettings from './components/ScheduleSettings';
 import ProjectDetail from './components/ProjectDetail';
 import CodeReview from './components/CodeReview';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -52,6 +55,30 @@ const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/settings/projects" 
+            element={
+              <ProtectedRoute>
+                <ProjectSettings />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/settings/feishu" 
+            element={
+              <ProtectedRoute>
+                <FeishuSettings />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/settings/schedule" 
+            element={
+              <ProtectedRoute>
+                <ScheduleSettings />
               </ProtectedRoute>
             } 
           />

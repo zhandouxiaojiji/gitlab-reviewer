@@ -5,7 +5,9 @@ import {
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
-  GitlabOutlined
+  GitlabOutlined,
+  BellOutlined,
+  ScheduleOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
@@ -98,7 +100,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         navigate(`/dashboard?user=${username}`);
         break;
       case 'settings':
-        navigate(`/settings?user=${username}`);
+      case 'settings-projects':
+        navigate(`/settings/projects?user=${username}`);
+        break;
+      case 'settings-feishu':
+        navigate(`/settings/feishu?user=${username}`);
+        break;
+      case 'settings-schedule':
+        navigate(`/settings/schedule?user=${username}`);
         break;
       default:
         // 处理项目菜单项点击
@@ -115,12 +124,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // 根据当前路径确定选中的菜单项
   const getSelectedKey = () => {
-    if (location.pathname.includes('/settings')) return 'settings';
+    if (location.pathname.includes('/settings/projects')) return 'settings-projects';
+    if (location.pathname.includes('/settings/feishu')) return 'settings-feishu';
+    if (location.pathname.includes('/settings/schedule')) return 'settings-schedule';
+    if (location.pathname.includes('/settings')) return 'settings-projects'; // 默认选中项目配置
     if (location.pathname.includes('/project') && projectName) {
       const project = projects.find(p => p.name === decodeURIComponent(projectName));
       return project ? `project-${project.id}` : 'dashboard';
     }
     return 'dashboard'; // 默认是dashboard
+  };
+
+  // 获取展开的子菜单
+  const getOpenKeys = () => {
+    if (location.pathname.includes('/settings')) {
+      return ['settings'];
+    }
+    return [];
   };
 
   // 构建菜单项
@@ -144,6 +164,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       key: 'settings',
       icon: <SettingOutlined />,
       label: '设置',
+      children: [
+        {
+          key: 'settings-projects',
+          icon: <GitlabOutlined />,
+          label: '项目配置',
+        },
+        {
+          key: 'settings-feishu',
+          icon: <BellOutlined />,
+          label: '飞书通知',
+        },
+        {
+          key: 'settings-schedule',
+          icon: <ScheduleOutlined />,
+          label: '定时报告',
+        }
+      ]
     };
 
     return [...baseItems, ...projectItems, settingsItem];
@@ -221,6 +258,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               theme="dark"
               mode="inline"
               selectedKeys={[getSelectedKey()]}
+              defaultOpenKeys={getOpenKeys()}
               onClick={({ key }) => handleMenuClick(key)}
               items={getMenuItems()}
               style={{ 
