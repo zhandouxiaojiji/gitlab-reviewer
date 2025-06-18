@@ -50,18 +50,31 @@ router.post('/config', async (req, res) => {
 // 测试飞书连接
 router.post('/test', async (req, res) => {
   try {
-    const config = getGlobalConfig();
+    const { webhookUrl } = req.body;
+    let testWebhookUrl = webhookUrl;
     
-    if (!config.feishu?.enabled) {
-      return res.status(400).json({ message: '飞书通知未启用' });
+    // 如果没有传入webhook地址，则使用全局配置
+    if (!testWebhookUrl) {
+      const config = getGlobalConfig();
+      
+      if (!config.feishu?.enabled) {
+        return res.status(400).json({ message: '飞书通知未启用' });
+      }
+
+      if (!config.feishu?.webhookUrl) {
+        return res.status(400).json({ message: '飞书Webhook地址未配置' });
+      }
+      
+      testWebhookUrl = config.feishu.webhookUrl;
     }
 
-    if (!config.feishu?.webhookUrl) {
-      return res.status(400).json({ message: '飞书Webhook地址未配置' });
+    // 验证webhook地址格式
+    if (!testWebhookUrl.startsWith('https://open.feishu.cn/open-apis/bot/v2/hook/')) {
+      return res.status(400).json({ message: '请提供有效的飞书机器人Webhook地址' });
     }
 
     // 发送测试消息
-    await feishuNotificationService.testWebhook(config.feishu.webhookUrl);
+    await feishuNotificationService.testWebhook(testWebhookUrl);
     
     res.json({ message: '飞书通知测试成功' });
   } catch (error) {

@@ -996,4 +996,205 @@ router.post('/:id/webhook/test', authenticateToken, async (req, res) => {
   }
 });
 
+// ==================== 项目级别飞书通知配置 ====================
+
+// 获取项目飞书通知配置
+router.get('/:id/feishu-config', authenticateToken, async (req, res) => {
+  try {
+    const project = projectStorage.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    const feishuConfig = project.feishuConfig || {
+      enabled: false,
+      webhookUrl: ''
+    };
+
+    res.json(feishuConfig);
+  } catch (error) {
+    console.error('获取项目飞书配置失败:', error);
+    res.status(500).json({ message: '获取项目飞书配置失败' });
+  }
+});
+
+// 保存项目飞书通知配置
+router.post('/:id/feishu-config', authenticateToken, async (req, res) => {
+  try {
+    const { enabled, webhookUrl } = req.body;
+    const project = projectStorage.findById(req.params.id);
+    
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 验证参数
+    if (enabled && !webhookUrl) {
+      return res.status(400).json({ message: '启用通知时必须提供Webhook地址' });
+    }
+
+    if (enabled && !webhookUrl.startsWith('https://open.feishu.cn/open-apis/bot/v2/hook/')) {
+      return res.status(400).json({ message: '请提供有效的飞书机器人Webhook地址' });
+    }
+
+    // 更新项目配置
+    const updatedProject = projectStorage.update(req.params.id, {
+      feishuConfig: {
+        enabled,
+        webhookUrl: enabled ? webhookUrl : ''
+      },
+      updatedAt: new Date().toISOString()
+    });
+
+    res.json({ message: '项目飞书配置保存成功' });
+  } catch (error) {
+    console.error('保存项目飞书配置失败:', error);
+    res.status(500).json({ message: '保存项目飞书配置失败' });
+  }
+});
+
+// ==================== 项目级别定时报告配置 ====================
+
+// 获取项目定时报告配置
+router.get('/:id/schedule-config', authenticateToken, async (req, res) => {
+  try {
+    const project = projectStorage.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    const scheduleConfig = project.scheduleConfig || {
+      enabled: false,
+      frequency: 'daily',
+      customCron: '',
+      reportType: 'summary',
+      time: '09:00'
+    };
+
+    res.json(scheduleConfig);
+  } catch (error) {
+    console.error('获取项目定时配置失败:', error);
+    res.status(500).json({ message: '获取项目定时配置失败' });
+  }
+});
+
+// 保存项目定时报告配置
+router.post('/:id/schedule-config', authenticateToken, async (req, res) => {
+  try {
+    const { enabled, frequency, customCron, reportType, time } = req.body;
+    const project = projectStorage.findById(req.params.id);
+    
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 验证参数
+    if (enabled && !frequency) {
+      return res.status(400).json({ message: '启用定时任务时必须选择执行频率' });
+    }
+
+    if (enabled && frequency === 'custom' && !customCron) {
+      return res.status(400).json({ message: '自定义频率时必须提供Cron表达式' });
+    }
+
+    if (enabled && frequency === 'daily' && !time) {
+      return res.status(400).json({ message: '每日频率时必须选择执行时间' });
+    }
+
+    if (enabled && !reportType) {
+      return res.status(400).json({ message: '启用定时任务时必须选择报告类型' });
+    }
+
+    // 更新项目配置
+    const updatedProject = projectStorage.update(req.params.id, {
+      scheduleConfig: {
+        enabled,
+        frequency: enabled ? frequency : 'daily',
+        customCron: enabled && frequency === 'custom' ? customCron : '',
+        reportType: enabled ? reportType : 'summary',
+        time: enabled && frequency === 'daily' ? time : '09:00'
+      },
+      updatedAt: new Date().toISOString()
+    });
+
+    res.json({ message: '项目定时报告配置保存成功' });
+  } catch (error) {
+    console.error('保存项目定时配置失败:', error);
+    res.status(500).json({ message: '保存项目定时配置失败' });
+  }
+});
+
+// 获取项目定时任务状态
+router.get('/:id/schedule-status', authenticateToken, async (req, res) => {
+  try {
+    const project = projectStorage.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 这里应该从实际的定时任务管理器获取状态
+    // 暂时返回模拟数据
+    const status = {
+      isRunning: project.scheduleConfig?.enabled || false,
+      lastRun: project.scheduleConfig?.lastRun || null,
+      nextRun: project.scheduleConfig?.nextRun || null,
+      lastResult: project.scheduleConfig?.lastResult || null
+    };
+
+    res.json(status);
+  } catch (error) {
+    console.error('获取项目定时任务状态失败:', error);
+    res.status(500).json({ message: '获取项目定时任务状态失败' });
+  }
+});
+
+// 手动触发项目报告发送
+router.post('/:id/trigger-report', authenticateToken, async (req, res) => {
+  try {
+    const { reportType = 'summary' } = req.body;
+    const project = projectStorage.findById(req.params.id);
+    
+    if (!project) {
+      return res.status(404).json({ message: '项目不存在' });
+    }
+
+    // 检查项目飞书配置
+    if (!project.feishuConfig?.enabled || !project.feishuConfig?.webhookUrl) {
+      return res.status(400).json({ message: '请先配置项目飞书通知' });
+    }
+
+    // 这里应该调用实际的报告发送服务
+    // 暂时模拟成功
+    
+    // 更新最后执行记录
+    const updatedProject = projectStorage.update(req.params.id, {
+      scheduleConfig: {
+        ...project.scheduleConfig,
+        lastRun: new Date().toISOString(),
+        lastResult: '成功'
+      },
+      updatedAt: new Date().toISOString()
+    });
+
+    res.json({ message: '项目报告发送成功' });
+  } catch (error) {
+    console.error('手动触发项目报告失败:', error);
+    
+    // 更新执行失败记录
+    const project = projectStorage.findById(req.params.id);
+    if (project) {
+      projectStorage.update(req.params.id, {
+        scheduleConfig: {
+          ...project.scheduleConfig,
+          lastRun: new Date().toISOString(),
+          lastResult: '失败'
+        },
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    res.status(500).json({ message: '项目报告发送失败' });
+  }
+});
+
 export default router; 

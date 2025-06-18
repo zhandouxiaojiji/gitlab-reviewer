@@ -3,7 +3,6 @@ import { Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import Settings from './components/Settings';
 import ProjectSettings from './components/ProjectSettings';
 import FeishuSettings from './components/FeishuSettings';
 import ScheduleSettings from './components/ScheduleSettings';
@@ -47,14 +46,6 @@ const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ProjectDetail />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/settings" 
-            element={
-              <ProtectedRoute>
-                <Settings />
               </ProtectedRoute>
             } 
           />
